@@ -274,7 +274,7 @@ impl Dialog {
                 let client = window(ui, screen, "Edit", Vec2::new(420.0, 125.0));
                 label(ui, client.min + Vec2::new(12.0, 12.0), "Edit file:");
                 let er = Rect::from_min_size(client.min + Vec2::new(12.0, 30.0), Vec2::new(client.width() - 24.0, 21.0));
-                let sel = stem(name);
+                let sel = Some((0, name.chars().count()));
                 edit(ui, er, name, true, "editnew", sel);
                 let (ok, cancel) = two_buttons(ui, client, "OK", "Cancel");
                 if (ok || enter) && !name.trim().is_empty() {

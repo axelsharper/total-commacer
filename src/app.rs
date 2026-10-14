@@ -605,7 +605,26 @@ impl App {
         } else if cfg!(target_os = "macos") {
             Command::new("open").arg("-t").arg(path).spawn().map(|_| ()).map_err(|e| e.to_string())
         } else {
-            open::that_detached(path).map_err(|e| e.to_string())
+            // no editor configured: try the usual desktop text editors, then $EDITOR in a
+            // terminal, then whatever the desktop associates with the file
+            let mut r = Err(String::new());
+            for ed in ["gnome-text-editor", "gedit", "kate", "mousepad", "xed", "pluma", "leafpad", "geany"] {
+                if let Ok(_) = Command::new(ed).arg(path).current_dir(&dir).spawn() {
+                    r = Ok(());
+                    break;
+                }
+            }
+            if r.is_err() {
+                if let Ok(ed) = std::env::var("EDITOR") {
+                    if !ed.trim().is_empty() {
+                        r = run_in_terminal(&dir, &format!("{ed} '{}'", path.to_string_lossy().replace('\'', "'\\''")));
+                    }
+                }
+            }
+            if r.is_err() {
+                r = open::that_detached(path).map_err(|e| e.to_string());
+            }
+            r
         };
         if let Err(e) = r {
             self.message("Error", &format!("Cannot start the editor:\n{e}"), true);
@@ -1592,6 +1611,26 @@ impl eframe::App for App {
         let ctx = &root.ctx().clone();
         self.frame_no += 1;
         self.now = ctx.input(|i| i.time);
+        // Alt+letter is a mnemonic everywhere (menus, dialog buttons); the letter must never
+        // land in a focused edit box as text. AltGr (Ctrl+Alt) still types its characters.
+        // (The modifier state may already be released by the time the frame runs, so look at
+        // the Key events themselves rather than at the current modifiers.)
+        ctx.input_mut(|i| {
+            let alt_keys: Vec<String> = i
+                .events
+                .iter()
+                .filter_map(|e| match e {
+                    egui::Event::Key { key, pressed: true, modifiers, .. } if modifiers.alt && !modifiers.ctrl => Some(key.name().to_lowercase()),
+                    _ => None,
+                })
+                .collect();
+            if !alt_keys.is_empty() {
+                i.events.retain(|e| match e {
+                    egui::Event::Text(t) => !alt_keys.contains(&t.to_lowercase()),
+                    _ => true,
+                });
+            }
+        });
         self.poll_op();
         if self.lister.is_none() && self.dialog.is_none() {
             self.handle_keys(ctx);

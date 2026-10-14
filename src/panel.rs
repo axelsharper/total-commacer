@@ -101,6 +101,7 @@ impl Panel {
     // ------------------------------------------------------------------ data
     pub fn reload(&mut self) {
         let keep = self.cursor_entry().map(|e| e.name.clone());
+        self.list_title = None;
         let listing = if self.branch { self.branch_listing() } else { fs::list_dir(&self.path, self.show_hidden) };
         match listing {
             Ok(mut v) => {
