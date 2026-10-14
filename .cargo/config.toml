@@ -1,0 +1,3 @@
+# The sparse index (index.crates.io) is blocked in some sandboxes; the git index via GitHub works everywhere.
+[registries.crates-io]
+protocol = "git"

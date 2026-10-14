@@ -1,0 +1,29 @@
+[package]
+name = "total-commacer"
+version = "0.1.0"
+edition = "2021"
+description = "A Total Commander-style two-panel file manager that looks like Windows XP, for macOS, Linux and Windows"
+license = "MIT"
+default-run = "total-commacer"
+
+[[bin]]
+name = "total-commacer"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.36", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+egui = "0.36"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+dirs = "7"
+chrono = "0.4"
+open = "5"
+walkdir = "2"
+fs4 = "1"
+
+[profile.release]
+opt-level = 2
+strip = true
+lto = "thin"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
