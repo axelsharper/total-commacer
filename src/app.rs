@@ -1575,7 +1575,7 @@ pub fn frame_window(ui: &mut Ui, screen: Rect, title: &str, icon: &egui::Texture
             (Rect::from_min_size(Pos2::new(screen.right() - b, screen.bottom() - b), Vec2::splat(b)), D::SouthEast, egui::CursorIcon::ResizeNwSe),
         ];
         for (i, (r, dir, cursor)) in edges.into_iter().enumerate() {
-            let resp = ui.interact(r, ui.id().with(("edge", i)), (Sense::CLICK | Sense::DRAG));
+            let resp = ui.interact(r, ui.id().with(("edge", i)), Sense::CLICK | Sense::DRAG);
             if resp.hovered() || resp.dragged() {
                 ui.ctx().set_cursor_icon(cursor);
             }
@@ -1676,7 +1676,7 @@ impl eframe::App for App {
             // modal dialog on top
             if self.dialog.is_some() {
                 let blocker = egui::Area::new(egui::Id::new("modal-blocker")).order(egui::Order::Foreground).fixed_pos(screen.min).show(ctx, |ui| {
-                    let (r, _) = ui.allocate_exact_size(screen.size(), (Sense::CLICK | Sense::DRAG));
+                    let (r, _) = ui.allocate_exact_size(screen.size(), Sense::CLICK | Sense::DRAG);
                     let _ = r;
                     let op = self.op.as_ref();
                     // the same input is replayed on egui's second pass: "fresh" is per input frame, by time

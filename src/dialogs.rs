@@ -97,7 +97,7 @@ pub fn window(ui: &mut Ui, screen: Rect, title: &str, size: Vec2) -> Rect {
     p.text(cap.min + Vec2::new(8.0, 5.0), Align2::LEFT_TOP, title, xp::font_caption(), xp::rgb(0x0A, 0x24, 0x6A));
     p.text(cap.min + Vec2::new(7.0, 4.0), Align2::LEFT_TOP, title, xp::font_caption(), Color32::WHITE);
     // block clicks from reaching the panels below
-    let _ = ui.interact(r, ui.id().with("dlg-modal"), (Sense::CLICK | Sense::DRAG));
+    let _ = ui.interact(r, ui.id().with("dlg-modal"), Sense::CLICK | Sense::DRAG);
     Rect::from_min_max(Pos2::new(r.left() + 1.0, cap.bottom()), r.max - Vec2::new(1.0, 1.0))
 }
 

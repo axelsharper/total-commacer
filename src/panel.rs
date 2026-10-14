@@ -60,6 +60,9 @@ pub struct Panel {
     pub list_title: Option<String>,
     pub drive_label: String,
     sel_anchor: Option<usize>,
+    /// cursor position at the last draw; the list only auto-scrolls to the cursor when it moved,
+    /// so scrollbar/wheel scrolling (which leaves the cursor alone, like TC) is not undone each frame
+    drawn_cursor: Option<usize>,
 }
 
 impl Panel {
@@ -89,6 +92,7 @@ impl Panel {
             list_title: None,
             drive_label: String::new(),
             sel_anchor: None,
+            drawn_cursor: None,
         };
         p.reload();
         p
@@ -276,6 +280,24 @@ impl Panel {
                 let total_cols = self.entries.len().div_ceil(rows);
                 let max_first = total_cols.saturating_sub(cols);
                 self.scroll = self.scroll.min(max_first * rows);
+            }
+        }
+    }
+
+    /// Per-frame scroll bookkeeping: follow the cursor only when it moved, otherwise just clamp.
+    fn frame_scroll(&mut self) {
+        if self.drawn_cursor != Some(self.cursor) {
+            self.ensure_visible();
+            self.drawn_cursor = Some(self.cursor);
+        } else {
+            let rows = self.rows_visible.max(1);
+            match self.view {
+                View::Full => self.scroll = self.scroll.min(self.entries.len().saturating_sub(rows)),
+                View::Brief => {
+                    let cols = self.cols_visible.max(1);
+                    let total_cols = self.entries.len().div_ceil(rows);
+                    self.scroll = self.scroll.min(total_cols.saturating_sub(cols) * rows);
+                }
             }
         }
     }
@@ -622,7 +644,7 @@ impl Panel {
         let list = Rect::from_min_max(Pos2::new(inner.left(), header.bottom()), Pos2::new(inner.right() - xp::SB_W, inner.bottom()));
         let sb = Rect::from_min_max(Pos2::new(inner.right() - xp::SB_W, inner.top()), inner.right_bottom());
         self.rows_visible = (list.height() / ROW_H).floor().max(1.0) as usize;
-        self.ensure_visible();
+        self.frame_scroll();
 
         // columns
         let w_attr = 34.0;
@@ -664,7 +686,8 @@ impl Panel {
         col_x[5] = x;
         xp::header_bottom(&p, header);
 
-        // rows
+        // rows (list background registered first so the rows win egui's hit test)
+        self.list_mouse(ui, list, id, ev);
         let lp = ui.painter_at(list);
         let rows = self.rows_visible;
         for row in 0..rows {
@@ -694,7 +717,6 @@ impl Panel {
             let resp = ui.interact(rr, id.with(("row", i)), Sense::CLICK);
             self.row_mouse(ui, &resp, i, right_click_selects, ev);
         }
-        self.list_mouse(ui, list, id, ev);
         let max = self.entries.len();
         if let Some(s) = scrollbar(ui, &p, sb, id.with("vsb"), self.scroll, rows, max, true) {
             self.scroll = s;
@@ -708,9 +730,10 @@ impl Panel {
         self.rows_visible = (list.height() / ROW_H).floor().max(1.0) as usize;
         let col_w = (list.width() / 3.0).floor().max(100.0);
         self.cols_visible = (list.width() / col_w).floor().max(1.0) as usize;
-        self.ensure_visible();
+        self.frame_scroll();
         let rows = self.rows_visible;
         let cols = self.cols_visible;
+        self.list_mouse(ui, list, id, ev);
         let first_col = self.scroll / rows;
         let lp = ui.painter_at(list);
         for c in 0..cols {
@@ -741,7 +764,6 @@ impl Panel {
                 self.row_mouse(ui, &resp, i, right_click_selects, ev);
             }
         }
-        self.list_mouse(ui, list, id, ev);
         let total_cols = self.entries.len().div_ceil(rows);
         if let Some(s) = scrollbar(ui, &p, sb, id.with("hsb"), first_col, cols, total_cols, false) {
             self.scroll = s * rows;
@@ -785,7 +807,7 @@ impl Panel {
         if resp.clicked() || resp.secondary_clicked() {
             ev.push(PanelEvent::Activate);
         }
-        if resp.hovered() {
+        if resp.contains_pointer() {
             let dy = wheel_dy(ui);
             if dy.abs() > 0.0 {
                 let step = if dy > 0.0 { -3i64 } else { 3 };
@@ -879,7 +901,9 @@ pub fn scrollbar(ui: &mut Ui, p: &egui::Painter, r: Rect, id: Id, pos: usize, pa
         } else {
             Rect::from_min_size(Pos2::new(track.left() + off, track.top()), Vec2::new(thumb_len, track.height()))
         };
-        let tr = ui.interact(thumb, id.with("thumb"), (Sense::CLICK | Sense::DRAG));
+        // track first, thumb second: the later-registered widget wins egui's hit test
+        let trk = ui.interact(track, id.with("track"), Sense::CLICK);
+        let tr = ui.interact(thumb, id.with("thumb"), Sense::CLICK | Sense::DRAG);
         xp::scrollbar_thumb(p, thumb, tr.hovered(), tr.dragged());
         if tr.drag_started() {
             ui.data_mut(|d| d.insert_temp(id.with("drag0"), (pos as f32, off)));
@@ -905,7 +929,6 @@ pub fn scrollbar(ui: &mut Ui, p: &egui::Painter, r: Rect, id: Id, pos: usize, pa
             ui.data_mut(|d| d.remove::<Pos2>(id.with("dragp")));
         }
         // page up/down by clicking the track
-        let trk = ui.interact(track, id.with("track"), Sense::CLICK);
         if trk.clicked() && !tr.hovered() {
             if let Some(ptr) = ui.input(|i| i.pointer.interact_pos()) {
                 let before = if vertical { ptr.y < thumb.top() } else { ptr.x < thumb.left() };
