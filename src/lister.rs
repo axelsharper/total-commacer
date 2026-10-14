@@ -134,7 +134,7 @@ impl Lister {
             let (t, _) = xp::strip_mnemonic(it);
             let w = xp::text_width(&p, &t) + 14.0;
             let r = Rect::from_min_size(Pos2::new(x, menu.top() + 1.0), Vec2::new(w, menu_h - 2.0));
-            let resp = ui.interact(r, ui.id().with(("lmenu", i)), Sense::click());
+            let resp = ui.interact(r, ui.id().with(("lmenu", i)), Sense::CLICK);
             if resp.hovered() || self.menu_open == Some(i) {
                 xp::fill(&p, r, xp::HIGHLIGHT);
                 xp::mnemonic_text(&p, r.center(), Align2::CENTER_CENTER, it, xp::font(), xp::HIGHLIGHT_TEXT);
@@ -240,7 +240,7 @@ impl Lister {
         if let Some(s) = crate::panel::scrollbar(ui, &p, sb, ui.id().with("lsb"), self.scroll, self.rows_visible, self.lines.len(), true) {
             self.scroll = s;
         }
-        let resp = ui.interact(text_area, ui.id().with("lview"), Sense::click());
+        let resp = ui.interact(text_area, ui.id().with("lview"), Sense::CLICK);
         if resp.hovered() {
             let dy = crate::panel::wheel_dy(ui);
             if dy > 0.0 {
@@ -275,14 +275,14 @@ impl Lister {
             xp::text(&p, r.min + Vec2::new(10.0, 34.0), "Find what:", xp::TEXT);
             let er = Rect::from_min_size(r.min + Vec2::new(70.0, 31.0), Vec2::new(270.0, 20.0));
             xp::sunken(&p, er);
-            let te = egui::TextEdit::singleline(&mut self.search).frame(egui::Frame::NONE).font(xp::font()).desired_width(260.0);
+            let te = egui::TextEdit::singleline(&mut self.search).id_salt("lister-find").frame(egui::Frame::NONE).font(xp::font()).desired_width(260.0);
             let mut cui = ui.new_child(egui::UiBuilder::new().max_rect(er.shrink2(Vec2::new(3.0, 2.0))));
             let resp = cui.add(te);
             resp.request_focus();
             let ok = Rect::from_min_size(r.min + Vec2::new(r.width() - 170.0, 70.0), Vec2::new(75.0, 23.0));
             let cancel = Rect::from_min_size(r.min + Vec2::new(r.width() - 85.0, 70.0), Vec2::new(75.0, 23.0));
-            let okr = ui.interact(ok, ui.id().with("fok"), Sense::click());
-            let cr = ui.interact(cancel, ui.id().with("fcancel"), Sense::click());
+            let okr = ui.interact(ok, ui.id().with("fok"), Sense::CLICK);
+            let cr = ui.interact(cancel, ui.id().with("fcancel"), Sense::CLICK);
             xp::button_face(&p, ok, okr.hovered(), okr.is_pointer_button_down_on(), true, true);
             xp::button_face(&p, cancel, cr.hovered(), cr.is_pointer_button_down_on(), false, true);
             p.text(ok.center(), Align2::CENTER_CENTER, "OK", xp::font(), xp::TEXT);
@@ -333,7 +333,7 @@ impl Lister {
                 continue;
             }
             let ir = Rect::from_min_size(Pos2::new(r.left() + 2.0, y), Vec2::new(w - 4.0, 18.0));
-            let resp = ui.interact(ir, ui.id().with(("lmi", open, y as i32)), Sense::click());
+            let resp = ui.interact(ir, ui.id().with(("lmi", open, y as i32)), Sense::CLICK);
             let (fg, bg) = if resp.hovered() { (xp::HIGHLIGHT_TEXT, xp::HIGHLIGHT) } else { (xp::TEXT, Color32::TRANSPARENT) };
             xp::fill(&mp, ir, bg);
             xp::mnemonic_text(&mp, Pos2::new(ir.left() + 26.0, ir.center().y), Align2::LEFT_CENTER, label, xp::font(), fg);

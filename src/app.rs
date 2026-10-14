@@ -43,7 +43,7 @@ pub struct Popup {
     pub width: f32,
     pub menu_index: Option<usize>,
     pub hover: Option<usize>,
-    pub opened_frame: u64,
+    pub opened_at: f64,
 }
 
 const MENU_H: f32 = 20.0;
@@ -73,6 +73,8 @@ pub struct App {
     exit_requested: bool,
     frame_no: u64,
     menu_rects: Vec<Rect>,
+    dialog_seen_at: Option<f64>,
+    now: f64,
 }
 
 impl App {
@@ -104,6 +106,8 @@ impl App {
             exit_requested: false,
             frame_no: 0,
             menu_rects: Vec::new(),
+            dialog_seen_at: None,
+            now: 0.0,
         };
         if nag {
             app.dialog = Some(Dialog::Nag { number: (seed % 3) as u8 + 1, tries: 0 });
@@ -189,7 +193,10 @@ impl App {
                 let prompt = if t.len() == 1 { format!("Do you really want to delete\n{}?", fs::display(&t[0].path)) } else { format!("Do you really want to delete {} file(s)/directorie(s)?", t.len()) };
                 self.dialog = Some(Dialog::Delete { prompt, sources: t.iter().map(|e| e.path.clone()).collect() });
             }
-            Exit => self.exit_requested = true,
+            Exit => {
+                debug("exit: Cmd::Exit");
+                self.exit_requested = true;
+            }
             Pack => {
                 let t = self.active().targets();
                 if t.is_empty() {
@@ -728,7 +735,7 @@ impl App {
             })
             .collect();
         let pos = self.menu_rects.get(i).map(|r| r.left_bottom()).unwrap_or(Pos2::new(xp::BORDER_W, xp::TITLE_H + MENU_H));
-        self.popup = Some(Popup { items, pos, width: 300.0, menu_index: Some(i), hover: None, opened_frame: self.frame_no });
+        self.popup = Some(Popup { items, pos, width: 300.0, menu_index: Some(i), hover: None, opened_at: self.now });
     }
 
     fn drive_popup(&mut self, side: Side) {
@@ -738,7 +745,7 @@ impl App {
             .map(|d| PopupItem::Item { label: format!("[{}]  {}", d.letter, d.label), shortcut: String::new(), enabled: true, action: PopupAction::Goto(side, d.root.clone()) })
             .collect();
         let x = if side == Side::Left { xp::BORDER_W + 4.0 } else { xp::BORDER_W + 4.0 + (self.left_width()) };
-        self.popup = Some(Popup { items, pos: Pos2::new(x, xp::TITLE_H + MENU_H + TOOLBAR_H + DRIVEBAR_H + panel::DRIVE_ROW_H), width: 220.0, menu_index: None, hover: None, opened_frame: self.frame_no });
+        self.popup = Some(Popup { items, pos: Pos2::new(x, xp::TITLE_H + MENU_H + TOOLBAR_H + DRIVEBAR_H + panel::DRIVE_ROW_H), width: 220.0, menu_index: None, hover: None, opened_at: self.now });
         self.active = side;
     }
 
@@ -749,7 +756,7 @@ impl App {
         items.push(PopupItem::Item { label: "&Add current dir".into(), shortcut: String::new(), enabled: true, action: PopupAction::HotAdd });
         items.push(PopupItem::Item { label: "&Remove current dir".into(), shortcut: String::new(), enabled: true, action: PopupAction::HotRemove });
         let x = self.panel_x(side) + 8.0;
-        self.popup = Some(Popup { items, pos: Pos2::new(x, xp::TITLE_H + MENU_H + TOOLBAR_H + DRIVEBAR_H + panel::DRIVE_ROW_H + panel::PATH_ROW_H), width: 260.0, menu_index: None, hover: None, opened_frame: self.frame_no });
+        self.popup = Some(Popup { items, pos: Pos2::new(x, xp::TITLE_H + MENU_H + TOOLBAR_H + DRIVEBAR_H + panel::DRIVE_ROW_H + panel::PATH_ROW_H), width: 260.0, menu_index: None, hover: None, opened_at: self.now });
     }
 
     fn dir_history_popup(&mut self) {
@@ -757,7 +764,7 @@ impl App {
         let hist: Vec<PathBuf> = self.active().history.iter().rev().take(20).cloned().collect();
         let items = hist.iter().map(|p| PopupItem::Item { label: fs::display(p), shortcut: String::new(), enabled: true, action: PopupAction::Goto(side, p.clone()) }).collect();
         let x = self.panel_x(side) + 8.0;
-        self.popup = Some(Popup { items, pos: Pos2::new(x, xp::TITLE_H + MENU_H + TOOLBAR_H + DRIVEBAR_H + panel::DRIVE_ROW_H + panel::PATH_ROW_H), width: 320.0, menu_index: None, hover: None, opened_frame: self.frame_no });
+        self.popup = Some(Popup { items, pos: Pos2::new(x, xp::TITLE_H + MENU_H + TOOLBAR_H + DRIVEBAR_H + panel::DRIVE_ROW_H + panel::PATH_ROW_H), width: 320.0, menu_index: None, hover: None, opened_at: self.now });
     }
 
     fn cmd_history_popup(&mut self) {
@@ -765,7 +772,7 @@ impl App {
             return;
         }
         let items = self.cfg.cmd_history.iter().map(|c| PopupItem::Item { label: c.clone(), shortcut: String::new(), enabled: true, action: PopupAction::SetCmdLine(c.clone()) }).collect();
-        self.popup = Some(Popup { items, pos: Pos2::new(xp::BORDER_W + 8.0, 0.0), width: 400.0, menu_index: None, hover: None, opened_frame: self.frame_no });
+        self.popup = Some(Popup { items, pos: Pos2::new(xp::BORDER_W + 8.0, 0.0), width: 400.0, menu_index: None, hover: None, opened_at: self.now });
         // position above the command line once we know the screen height (set in draw_popup)
     }
 
@@ -815,6 +822,9 @@ impl App {
             match e {
                 egui::Event::Key { key, pressed: true, modifiers, .. } => {
                     let m = Mods { ctrl: modifiers.ctrl || modifiers.mac_cmd, alt: modifiers.alt, shift: modifiers.shift };
+                    if std::env::var_os("TC_DEBUG").is_some() {
+                        eprintln!("key {:?} {:?} -> {:?}", key, m, commands::lookup(m, key));
+                    }
                     self.key(ctx, key, m);
                 }
                 egui::Event::Text(t) => {
@@ -892,8 +902,11 @@ impl App {
                 }
                 Key::Enter | Key::ArrowUp | Key::ArrowDown | Key::Tab => {}
                 _ if m.ctrl || m.alt => {}
+                // printable keys: the Text event that follows extends the search
+                Key::Space | Key::Period | Key::Minus | Key::Plus | Key::Comma | Key::Semicolon | Key::Quote | Key::Equals | Key::Backtick | Key::OpenBracket | Key::CloseBracket => return,
+                _ if key_char(key, false).is_some() => return,
                 _ => {
-                    // other keys end quick search but still act
+                    // navigation / function keys end quick search and still act
                     self.active().quick = None;
                 }
             }
@@ -936,6 +949,9 @@ impl App {
     }
 
     fn popup_key(&mut self, ctx: &Context, key: Key, m: Mods) {
+        if matches!(key, Key::Space | Key::Plus | Key::Minus) {
+            self.swallow_text = true;
+        }
         let Some(p) = &mut self.popup else { return };
         let n = p.items.len();
         let is_item = |items: &Vec<PopupItem>, i: usize| matches!(items.get(i), Some(PopupItem::Item { enabled: true, .. }));
@@ -997,11 +1013,14 @@ impl App {
                                 let a = action.clone();
                                 let _ = i;
                                 self.popup = None;
+                                self.swallow_text = true;
                                 self.popup_action(ctx, a);
                                 return;
                             }
                         }
                     }
+                    // any other letter while a menu is open: don't let it fall into the command line
+                    self.swallow_text = true;
                 }
             }
         }
@@ -1219,7 +1238,7 @@ impl App {
                         PopupItem::Item { label: "P&roperties  Alt+Enter".into(), shortcut: String::new(), enabled: true, action: PopupAction::Cmd(Cmd::Properties) },
                     ];
                     let pos = ctx.input(|i| i.pointer.interact_pos()).unwrap_or(Pos2::new(100.0, 100.0));
-                    self.popup = Some(Popup { items, pos, width: 200.0, menu_index: None, hover: None, opened_frame: self.frame_no });
+                    self.popup = Some(Popup { items, pos, width: 200.0, menu_index: None, hover: None, opened_at: self.now });
                 }
             }
         }
@@ -1239,7 +1258,7 @@ impl App {
             let w = xp::text_width(p, &t) + 14.0;
             let mr = Rect::from_min_size(Pos2::new(x, r.top() + 1.0), Vec2::new(w, MENU_H - 2.0));
             self.menu_rects.push(mr);
-            let resp = ui.interact(mr, ui.id().with(("menu", i)), Sense::click());
+            let resp = ui.interact(mr, ui.id().with(("menu", i)), Sense::CLICK);
             let p = ui.painter();
             let hi = open == Some(i);
             if hi {
@@ -1299,7 +1318,7 @@ impl App {
                 continue;
             };
             let br = Rect::from_min_size(Pos2::new(x, r.top() + 3.0), Vec2::new(23.0, 22.0));
-            let resp = ui.interact(br, ui.id().with(("tb", i)), Sense::click());
+            let resp = ui.interact(br, ui.id().with(("tb", i)), Sense::CLICK);
             let enabled = cmd.is_some();
             xp::tool_button(ui.painter(), br, resp.hovered() && enabled, resp.is_pointer_button_down_on() && enabled, *checked);
             icons::draw(ui.painter(), tex, br.min + Vec2::new(3.0, 3.0));
@@ -1350,7 +1369,7 @@ impl App {
             if br.right() > r.right() - 2.0 {
                 break;
             }
-            let resp = ui.interact(br, ui.id().with(("drv", side == Side::Left, i)), Sense::click());
+            let resp = ui.interact(br, ui.id().with(("drv", side == Side::Left, i)), Sense::CLICK);
             let checked = current.as_ref() == Some(&d.root);
             xp::tool_button(ui.painter(), br, resp.hovered(), resp.is_pointer_button_down_on(), checked);
             icons::draw(ui.painter(), panel::drive_icon(&self.icons, d.kind), br.min + Vec2::new(3.0, 3.0));
@@ -1384,7 +1403,7 @@ impl App {
             tp.rect_filled(Rect::from_min_size(Pos2::new(cx.round(), er.top() + 3.0), Vec2::new(1.0, 13.0)), 0.0, xp::TEXT);
         }
         ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
-        let resp = ui.interact(er, ui.id().with("cmdline"), Sense::click());
+        let resp = ui.interact(er, ui.id().with("cmdline"), Sense::CLICK);
         if resp.clicked() {
             self.cmd_caret = self.cmd.chars().count();
         }
@@ -1404,7 +1423,7 @@ impl App {
         let mut out = None;
         for (i, (label, cmd)) in keys.iter().enumerate() {
             let br = Rect::from_min_size(Pos2::new(r.left() + 2.0 + i as f32 * w, r.top() + 1.0), Vec2::new(w - 2.0, FKEY_H - 3.0));
-            let resp = ui.interact(br, ui.id().with(("fk", i)), Sense::click());
+            let resp = ui.interact(br, ui.id().with(("fk", i)), Sense::CLICK);
             xp::button_face(ui.painter(), br, resp.hovered(), resp.is_pointer_button_down_on(), false, true);
             ui.painter().text(br.center(), Align2::CENTER_CENTER, label, xp::font(), xp::TEXT);
             if resp.clicked() {
@@ -1430,7 +1449,7 @@ impl App {
         }
         let r = Rect::from_min_size(pos, Vec2::new(popup.width, h));
         let items = popup.items.clone();
-        let opened = popup.opened_frame;
+        let opened = popup.opened_at;
         let hover_kbd = popup.hover;
         let mut clicked: Option<PopupAction> = None;
         let mut new_hover = hover_kbd;
@@ -1450,7 +1469,7 @@ impl App {
                     }
                     PopupItem::Item { label, shortcut, enabled, action } => {
                         let ir = Rect::from_min_size(Pos2::new(r.left() + 2.0, y), Vec2::new(r.width() - 4.0, item_h));
-                        let resp = ui.interact(ir, ui.id().with(("pi", i)), Sense::click());
+                        let resp = ui.interact(ir, ui.id().with(("pi", i)), Sense::CLICK);
                         if resp.hovered() {
                             new_hover = Some(i);
                         }
@@ -1480,8 +1499,8 @@ impl App {
             return;
         }
         // click outside closes (ignore the click that opened it)
-        let (pressed, pos_opt) = ctx.input(|i| (i.pointer.any_pressed(), i.pointer.interact_pos()));
-        if pressed && self.frame_no > opened {
+        let (pressed, pos_opt, now) = ctx.input(|i| (i.pointer.any_pressed(), i.pointer.interact_pos(), i.time));
+        if pressed && now > opened {
             if let Some(pp) = pos_opt {
                 let in_menubar = self.menu_rects.iter().any(|m| m.contains(pp));
                 if !r.contains(pp) && !in_menubar {
@@ -1509,16 +1528,19 @@ pub fn frame_window(ui: &mut Ui, screen: Rect, title: &str, icon: &egui::Texture
     xp::fill(p, client, xp::FACE);
     icons::draw(p, icon, Pos2::new(screen.left() + 8.0, screen.top() + 7.0));
     let tcol = if active { Color32::WHITE } else { xp::rgb(0xD8, 0xE4, 0xF8) };
-    p.text(Pos2::new(screen.left() + 29.0, screen.top() + 8.0), Align2::LEFT_TOP, title, xp::font_caption(), xp::rgb(0x0A, 0x24, 0x6A));
-    p.text(Pos2::new(screen.left() + 28.0, screen.top() + 7.0), Align2::LEFT_TOP, title, xp::font_caption(), tcol);
     // caption buttons
     let by = screen.top() + 5.0;
     let close = Rect::from_min_size(Pos2::new(screen.right() - 5.0 - 21.0, by), Vec2::splat(21.0));
     let max = Rect::from_min_size(Pos2::new(close.left() - 2.0 - 21.0, by), Vec2::splat(21.0));
     let min = Rect::from_min_size(Pos2::new(max.left() - 21.0, by), Vec2::splat(21.0));
+    let title_clip = Rect::from_min_max(Pos2::new(screen.left() + 28.0, screen.top()), Pos2::new(min.left() - 6.0, cap.bottom()));
+    let title_shown = xp::ellipsize(p, title, title_clip.width(), xp::font_caption());
+    let tp = p.with_clip_rect(title_clip);
+    tp.text(Pos2::new(screen.left() + 29.0, screen.top() + 8.0), Align2::LEFT_TOP, &title_shown, xp::font_caption(), xp::rgb(0x0A, 0x24, 0x6A));
+    tp.text(Pos2::new(screen.left() + 28.0, screen.top() + 7.0), Align2::LEFT_TOP, &title_shown, xp::font_caption(), tcol);
     let mut closed = false;
     for (r, kind, name) in [(min, xp::CaptionButton::Minimize, "min"), (max, if maximized { xp::CaptionButton::Restore } else { xp::CaptionButton::Maximize }, "max"), (close, xp::CaptionButton::Close, "close")] {
-        let resp = ui.interact(r, ui.id().with(("cap", name)), Sense::click());
+        let resp = ui.interact(r, ui.id().with(("cap", name)), Sense::CLICK);
         xp::caption_button(ui.painter(), r, kind, resp.hovered(), resp.is_pointer_button_down_on());
         if resp.clicked() {
             match kind {
@@ -1531,7 +1553,7 @@ pub fn frame_window(ui: &mut Ui, screen: Rect, title: &str, icon: &egui::Texture
     }
     // drag / double-click on the caption
     let drag_r = Rect::from_min_max(cap.min, Pos2::new(min.left() - 4.0, cap.bottom()));
-    let dr = ui.interact(drag_r, ui.id().with("capdrag"), Sense::click_and_drag());
+    let dr = ui.interact(drag_r, ui.id().with("capdrag"), Sense::CLICK | Sense::DRAG);
     if dr.drag_started() {
         ui.ctx().send_viewport_cmd(ViewportCommand::StartDrag);
     }
@@ -1553,7 +1575,7 @@ pub fn frame_window(ui: &mut Ui, screen: Rect, title: &str, icon: &egui::Texture
             (Rect::from_min_size(Pos2::new(screen.right() - b, screen.bottom() - b), Vec2::splat(b)), D::SouthEast, egui::CursorIcon::ResizeNwSe),
         ];
         for (i, (r, dir, cursor)) in edges.into_iter().enumerate() {
-            let resp = ui.interact(r, ui.id().with(("edge", i)), Sense::click_and_drag());
+            let resp = ui.interact(r, ui.id().with(("edge", i)), (Sense::CLICK | Sense::DRAG));
             if resp.hovered() || resp.dragged() {
                 ui.ctx().set_cursor_icon(cursor);
             }
@@ -1569,6 +1591,7 @@ impl eframe::App for App {
     fn ui(&mut self, root: &mut Ui, _frame: &mut eframe::Frame) {
         let ctx = &root.ctx().clone();
         self.frame_no += 1;
+        self.now = ctx.input(|i| i.time);
         self.poll_op();
         if self.lister.is_none() && self.dialog.is_none() {
             self.handle_keys(ctx);
@@ -1584,6 +1607,7 @@ impl eframe::App for App {
             self.cfg.win_w = screen.width();
             let (client, closed) = frame_window(ui, screen, &format!("total-commacer {}", env!("CARGO_PKG_VERSION")), &self.icons.app, maximized);
             if closed {
+                debug("exit: caption close button");
                 self.exit_requested = true;
             }
             let mut y = client.top();
@@ -1652,16 +1676,28 @@ impl eframe::App for App {
             // modal dialog on top
             if self.dialog.is_some() {
                 let blocker = egui::Area::new(egui::Id::new("modal-blocker")).order(egui::Order::Foreground).fixed_pos(screen.min).show(ctx, |ui| {
-                    let (r, _) = ui.allocate_exact_size(screen.size(), Sense::click_and_drag());
+                    let (r, _) = ui.allocate_exact_size(screen.size(), (Sense::CLICK | Sense::DRAG));
                     let _ = r;
                     let op = self.op.as_ref();
+                    // the same input is replayed on egui's second pass: "fresh" is per input frame, by time
+                    let now = ctx.input(|i| i.time);
+                    let fresh = match self.dialog_seen_at {
+                        None => {
+                            self.dialog_seen_at = Some(now);
+                            true
+                        }
+                        Some(t) => t == now,
+                    };
                     if let Some(d) = &mut self.dialog {
-                        pending_action = d.show(ui, screen, op);
+                        pending_action = d.show(ui, screen, op, fresh);
                     }
                 });
                 let _ = blocker;
             }
         });
+        if self.dialog.is_none() {
+            self.dialog_seen_at = None;
+        }
         for (side, ev) in events {
             self.handle_panel_events(ctx, side, ev);
         }
@@ -1707,6 +1743,7 @@ impl eframe::App for App {
             }
         }
         if ctx.input(|i| i.viewport().close_requested()) {
+            debug("exit: close_requested");
             self.exit_requested = true;
         }
         if self.exit_requested {
@@ -1718,6 +1755,12 @@ impl eframe::App for App {
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.cfg.save();
+    }
+}
+
+fn debug(msg: &str) {
+    if std::env::var_os("TC_DEBUG").is_some() {
+        eprintln!("{msg}");
     }
 }
 

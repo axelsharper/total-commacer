@@ -41,6 +41,11 @@ fn setup_fonts(ctx: &egui::Context) {
     fonts.families.entry(egui::FontFamily::Proportional).or_default().insert(0, "tahoma".into());
     fonts.families.insert(egui::FontFamily::Name("bold".into()), vec!["tahomabd".into(), "tahoma".into()]);
     ctx.set_fonts(fonts);
+    // egui's own Ctrl+Q (quit) and Ctrl+plus/minus (zoom) would shadow TC's keys
+    ctx.options_mut(|o| {
+        o.quit_shortcuts.clear();
+        o.zoom_with_keyboard = false;
+    });
     ctx.all_styles_mut(|style| {
         style.text_styles.insert(egui::TextStyle::Body, egui::FontId::new(11.0, egui::FontFamily::Proportional));
         style.text_styles.insert(egui::TextStyle::Button, egui::FontId::new(11.0, egui::FontFamily::Proportional));

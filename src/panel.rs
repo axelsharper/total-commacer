@@ -510,7 +510,7 @@ impl Panel {
         icons::draw(&p, dtex, combo.min + Vec2::new(3.0, 2.0));
         xp::text(&p, combo.min + Vec2::new(21.0, 3.0), &format!("[{}]", dletter), xp::TEXT);
         let arrow = Rect::from_min_size(Pos2::new(combo.right() - 16.0, combo.top() + 1.0), Vec2::new(15.0, 18.0));
-        let ar = ui.interact(combo, id.with("drive"), Sense::click());
+        let ar = ui.interact(combo, id.with("drive"), Sense::CLICK);
         xp::scrollbar_button(&p, arrow, ar.hovered(), ar.is_pointer_button_down_on());
         xp::arrow_glyph(&p, arrow.center(), xp::Dir::Down, xp::rgb(0x4D, 0x61, 0x85));
         if ar.clicked() {
@@ -523,7 +523,7 @@ impl Panel {
         let b2 = Rect::from_min_size(Pos2::new(drive_row.right() - 22.0, drive_row.top() + 2.0), Vec2::new(20.0, 20.0));
         let b1 = Rect::from_min_size(Pos2::new(drive_row.right() - 44.0, drive_row.top() + 2.0), Vec2::new(20.0, 20.0));
         for (r, label, which) in [(b1, "\\", 0), (b2, "..", 1)] {
-            let resp = ui.interact(r, id.with(("navbtn", which)), Sense::click());
+            let resp = ui.interact(r, id.with(("navbtn", which)), Sense::CLICK);
             xp::button_face(&p, r, resp.hovered(), resp.is_pointer_button_down_on(), false, true);
             p.text(r.center(), Align2::CENTER_CENTER, label, xp::font(), xp::TEXT);
             if resp.clicked() {
@@ -550,7 +550,7 @@ impl Panel {
         };
         let shown = xp::ellipsize_path(&p, &title, path_row.width() - 8.0, xp::font());
         xp::text(&p, path_row.min + Vec2::new(3.0, 2.0), &shown, fg);
-        let pr = ui.interact(path_row, id.with("path"), Sense::click());
+        let pr = ui.interact(path_row, id.with("path"), Sense::CLICK);
         if pr.clicked() {
             ev.push(PanelEvent::Activate);
         }
@@ -567,7 +567,7 @@ impl Panel {
                 let name = if i == self.tab { self.path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| fs::display(&self.path)) } else { t.path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| fs::display(&t.path)) };
                 let w = xp::text_width(&p, &name) + 16.0;
                 let r = Rect::from_min_size(Pos2::new(x, tabs_row.top() + 2.0), Vec2::new(w, 18.0));
-                let resp = ui.interact(r, id.with(("tab", i)), Sense::click());
+                let resp = ui.interact(r, id.with(("tab", i)), Sense::CLICK);
                 if i == self.tab {
                     xp::fill(&p, r, xp::WINDOW);
                     xp::frame(&p, r, xp::SHADOW);
@@ -636,7 +636,7 @@ impl Panel {
         for (i, (label, w, sort)) in cols.iter().enumerate() {
             col_x[i] = x;
             let r = Rect::from_min_size(Pos2::new(x, header.top()), Vec2::new(*w, HEADER_H));
-            let resp = ui.interact(r, id.with(("hdr", i)), Sense::click());
+            let resp = ui.interact(r, id.with(("hdr", i)), Sense::CLICK);
             xp::header_cell(&p, r, resp.hovered(), resp.is_pointer_button_down_on());
             let align = if i == 2 { Align2::RIGHT_CENTER } else { Align2::LEFT_CENTER };
             let tpos = if i == 2 { Pos2::new(r.right() - 6.0, r.center().y) } else { Pos2::new(r.left() + 4.0, r.center().y) };
@@ -691,7 +691,7 @@ impl Panel {
             if active && i == self.cursor {
                 xp::focus_rect(&lp, rr, xp::TEXT);
             }
-            let resp = ui.interact(rr, id.with(("row", i)), Sense::click());
+            let resp = ui.interact(rr, id.with(("row", i)), Sense::CLICK);
             self.row_mouse(ui, &resp, i, right_click_selects, ev);
         }
         self.list_mouse(ui, list, id, ev);
@@ -737,7 +737,7 @@ impl Panel {
                 if active && i == self.cursor {
                     xp::focus_rect(&lp, rr, xp::TEXT);
                 }
-                let resp = ui.interact(rr, id.with(("row", i)), Sense::click());
+                let resp = ui.interact(rr, id.with(("row", i)), Sense::CLICK);
                 self.row_mouse(ui, &resp, i, right_click_selects, ev);
             }
         }
@@ -781,7 +781,7 @@ impl Panel {
     }
 
     fn list_mouse(&mut self, ui: &Ui, list: Rect, id: Id, ev: &mut Vec<PanelEvent>) {
-        let resp = ui.interact(list, id.with("listbg"), Sense::click());
+        let resp = ui.interact(list, id.with("listbg"), Sense::CLICK);
         if resp.clicked() || resp.secondary_clicked() {
             ev.push(PanelEvent::Activate);
         }
@@ -855,8 +855,8 @@ pub fn scrollbar(ui: &mut Ui, p: &egui::Painter, r: Rect, id: Id, pos: usize, pa
     };
     let max_pos = total.saturating_sub(page);
     let mut out = None;
-    let r1 = ui.interact(b1, id.with("b1"), Sense::click());
-    let r2 = ui.interact(b2, id.with("b2"), Sense::click());
+    let r1 = ui.interact(b1, id.with("b1"), Sense::CLICK);
+    let r2 = ui.interact(b2, id.with("b2"), Sense::CLICK);
     xp::scrollbar_button(p, b1, r1.hovered(), r1.is_pointer_button_down_on());
     xp::scrollbar_button(p, b2, r2.hovered(), r2.is_pointer_button_down_on());
     let glyph = xp::rgb(0x4D, 0x61, 0x85);
@@ -879,7 +879,7 @@ pub fn scrollbar(ui: &mut Ui, p: &egui::Painter, r: Rect, id: Id, pos: usize, pa
         } else {
             Rect::from_min_size(Pos2::new(track.left() + off, track.top()), Vec2::new(thumb_len, track.height()))
         };
-        let tr = ui.interact(thumb, id.with("thumb"), Sense::click_and_drag());
+        let tr = ui.interact(thumb, id.with("thumb"), (Sense::CLICK | Sense::DRAG));
         xp::scrollbar_thumb(p, thumb, tr.hovered(), tr.dragged());
         if tr.drag_started() {
             ui.data_mut(|d| d.insert_temp(id.with("drag0"), (pos as f32, off)));
@@ -905,7 +905,7 @@ pub fn scrollbar(ui: &mut Ui, p: &egui::Painter, r: Rect, id: Id, pos: usize, pa
             ui.data_mut(|d| d.remove::<Pos2>(id.with("dragp")));
         }
         // page up/down by clicking the track
-        let trk = ui.interact(track, id.with("track"), Sense::click());
+        let trk = ui.interact(track, id.with("track"), Sense::CLICK);
         if trk.clicked() && !tr.hovered() {
             if let Some(ptr) = ui.input(|i| i.pointer.interact_pos()) {
                 let before = if vertical { ptr.y < thumb.top() } else { ptr.x < thumb.left() };

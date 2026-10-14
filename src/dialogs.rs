@@ -75,8 +75,12 @@ pub enum Dialog {
     CalcSpace { lines: Vec<(String, String)> },
 }
 
-/// Read Enter/Esc before any TextEdit can consume them.
-fn keys(ui: &Ui) -> (bool, bool) {
+/// Read Enter/Esc before any TextEdit can consume them. On the frame a dialog opens the key
+/// that opened it is still "pressed", so a fresh dialog ignores both.
+fn keys(ui: &Ui, fresh: bool) -> (bool, bool) {
+    if fresh {
+        return (false, false);
+    }
     ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)))
 }
 
@@ -93,23 +97,61 @@ pub fn window(ui: &mut Ui, screen: Rect, title: &str, size: Vec2) -> Rect {
     p.text(cap.min + Vec2::new(8.0, 5.0), Align2::LEFT_TOP, title, xp::font_caption(), xp::rgb(0x0A, 0x24, 0x6A));
     p.text(cap.min + Vec2::new(7.0, 4.0), Align2::LEFT_TOP, title, xp::font_caption(), Color32::WHITE);
     // block clicks from reaching the panels below
-    let _ = ui.interact(r, ui.id().with("dlg-modal"), Sense::click_and_drag());
+    let _ = ui.interact(r, ui.id().with("dlg-modal"), (Sense::CLICK | Sense::DRAG));
     Rect::from_min_max(Pos2::new(r.left() + 1.0, cap.bottom()), r.max - Vec2::new(1.0, 1.0))
 }
 
 pub fn button(ui: &mut Ui, r: Rect, label: &str, default: bool, enabled: bool) -> bool {
-    let resp = ui.interact(r, ui.id().with(("dbtn", label, r.min.x as i32, r.min.y as i32)), Sense::click());
+    let resp = ui.interact(r, ui.id().with(("dbtn", label, r.min.x as i32, r.min.y as i32)), Sense::CLICK);
     let p = ui.painter().clone();
     xp::button_face(&p, r, resp.hovered() && enabled, resp.is_pointer_button_down_on() && enabled, default, enabled);
     xp::mnemonic_text(&p, r.center(), Align2::CENTER_CENTER, label, xp::font(), if enabled { xp::TEXT } else { xp::GRAYTEXT });
-    resp.clicked() && enabled
+    let (text, under) = xp::strip_mnemonic(label);
+    let mnemonic = under.and_then(|u| text.chars().nth(u)).map(|c| c.to_ascii_lowercase());
+    let fresh = ui.data(|d| d.get_temp::<bool>(egui::Id::new("dlg-fresh"))).unwrap_or(false);
+    let key_hit = enabled && !fresh && mnemonic.map(|c| mnemonic_pressed(ui, c)).unwrap_or(false);
+    (resp.clicked() && enabled) || key_hit
 }
 
-pub fn edit(ui: &mut Ui, r: Rect, text: &mut String, focus: bool) -> egui::Response {
+/// The underlined letter of a button: Alt+letter always, the bare letter when no edit box has focus.
+fn mnemonic_pressed(ui: &Ui, c: char) -> bool {
+    let text_focus = ui.memory(|m| m.focused().is_some());
+    ui.input(|i| {
+        i.events.iter().any(|e| match e {
+            egui::Event::Key { key, pressed: true, modifiers, .. } => {
+                let name = key.name();
+                name.chars().count() == 1 && name.chars().next().map(|k| k.to_ascii_lowercase()) == Some(c) && (modifiers.alt || (!text_focus && !modifiers.ctrl))
+            }
+            _ => false,
+        })
+    })
+}
+
+/// Single-line edit box. `salt` keeps each box's cursor state apart; `select` sets the
+/// selection (char range) — used on a dialog's first frame, like Windows selecting the text.
+pub fn edit(ui: &mut Ui, r: Rect, text: &mut String, focus: bool, salt: &str, select: Option<(usize, usize)>) -> egui::Response {
     xp::sunken(ui.painter(), r);
+    let id = ui.id().with(("xp-edit", salt));
+    // the selection can only be applied once the box has focus (an unfocused TextEdit drops it),
+    // so remember the wish on the dialog's first frame and apply it when focus has arrived
+    let pending = id.with("sel-pending");
+    let fresh = ui.data(|d| d.get_temp::<bool>(egui::Id::new("dlg-fresh"))).unwrap_or(false);
+    if fresh && select.is_some() {
+        ui.data_mut(|d| d.insert_temp(pending, true));
+    }
     let mut cui = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(Vec2::new(3.0, 2.0))));
-    let te = egui::TextEdit::singleline(text).frame(egui::Frame::NONE).font(xp::font()).text_color(xp::TEXT).desired_width(r.width() - 8.0);
+    let te = egui::TextEdit::singleline(text).id(id).frame(egui::Frame::NONE).font(xp::font()).text_color(xp::TEXT).desired_width(r.width() - 8.0);
     let resp = cui.add(te);
+    if resp.has_focus() && ui.data(|d| d.get_temp::<bool>(pending)).unwrap_or(false) {
+        if let Some((a, b)) = select {
+            let n = text.chars().count();
+            let mut st = egui::widgets::text_edit::TextEditState::load(ui.ctx(), id).unwrap_or_default();
+            st.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(a.min(n)), egui::text::CCursor::new(b.min(n)))));
+            st.store(ui.ctx(), id);
+            ui.data_mut(|d| d.remove::<bool>(pending));
+            ui.ctx().request_repaint();
+        }
+    }
     if focus && !resp.has_focus() && ui.memory(|m| m.focused().is_none()) {
         resp.request_focus();
     }
@@ -119,7 +161,7 @@ pub fn edit(ui: &mut Ui, r: Rect, text: &mut String, focus: bool) -> egui::Respo
 pub fn check(ui: &mut Ui, pos: Pos2, label: &str, v: &mut bool) {
     let w = xp::text_width(ui.painter(), label) + 20.0;
     let r = Rect::from_min_size(pos, Vec2::new(w, 14.0));
-    let resp = ui.interact(r, ui.id().with(("chk", label)), Sense::click());
+    let resp = ui.interact(r, ui.id().with(("chk", label)), Sense::CLICK);
     if resp.clicked() {
         *v = !*v;
     }
@@ -131,7 +173,7 @@ pub fn check(ui: &mut Ui, pos: Pos2, label: &str, v: &mut bool) {
 pub fn radio(ui: &mut Ui, pos: Pos2, label: &str, on: bool) -> bool {
     let w = xp::text_width(ui.painter(), label) + 20.0;
     let r = Rect::from_min_size(pos, Vec2::new(w, 14.0));
-    let resp = ui.interact(r, ui.id().with(("rad", label)), Sense::click());
+    let resp = ui.interact(r, ui.id().with(("rad", label)), Sense::CLICK);
     let p = ui.painter().clone();
     xp::radio(&p, Rect::from_min_size(pos, Vec2::splat(13.0)), on);
     xp::mnemonic_text(&p, Pos2::new(pos.x + 18.0, pos.y + 7.0), Align2::LEFT_CENTER, label, xp::font(), xp::TEXT);
@@ -161,14 +203,18 @@ impl Dialog {
         matches!(self, Dialog::Progress)
     }
 
-    pub fn show(&mut self, ui: &mut Ui, screen: Rect, op: Option<&OpHandle>) -> Option<Action> {
-        let (enter, esc) = keys(ui);
+    pub fn show(&mut self, ui: &mut Ui, screen: Rect, op: Option<&OpHandle>, fresh: bool) -> Option<Action> {
+        let (enter, esc) = keys(ui, fresh);
+        ui.data_mut(|d| d.insert_temp(egui::Id::new("dlg-fresh"), fresh));
+        let all = |t: &str| Some((0, t.chars().count()));
+        let stem = |t: &str| Some((0, t.rfind('.').filter(|&i| i > 0).map(|i| t[..i].chars().count()).unwrap_or(t.chars().count())));
         match self {
             Dialog::Copy { prompt, target, mv, sources, cwd } => {
                 let client = window(ui, screen, if *mv { "Move/Rename" } else { "Copy" }, Vec2::new(520.0, 150.0));
                 label(ui, client.min + Vec2::new(12.0, 14.0), prompt);
                 let er = Rect::from_min_size(client.min + Vec2::new(12.0, 34.0), Vec2::new(client.width() - 24.0, 21.0));
-                edit(ui, er, target, true);
+                let sel = all(target);
+                edit(ui, er, target, true, "copy", sel);
                 let (ok, cancel) = two_buttons(ui, client, "OK", "Cancel");
                 let tree = Rect::from_min_size(Pos2::new(client.left() + 12.0, client.bottom() - 32.0), Vec2::new(75.0, 23.0));
                 let _ = button(ui, tree, "&Tree", false, false);
@@ -201,7 +247,7 @@ impl Dialog {
                 let client = window(ui, screen, "Create new directory", Vec2::new(420.0, 125.0));
                 label(ui, client.min + Vec2::new(12.0, 12.0), "Create new directory:");
                 let er = Rect::from_min_size(client.min + Vec2::new(12.0, 30.0), Vec2::new(client.width() - 24.0, 21.0));
-                edit(ui, er, name, true);
+                edit(ui, er, name, true, "mkdir", None);
                 let (ok, cancel) = two_buttons(ui, client, "OK", "Cancel");
                 if (ok || enter) && !name.trim().is_empty() {
                     return Some(Action::MkDir(name.trim().to_string()));
@@ -214,7 +260,8 @@ impl Dialog {
                 let client = window(ui, screen, "Rename", Vec2::new(420.0, 125.0));
                 label(ui, client.min + Vec2::new(12.0, 12.0), &format!("Rename '{}' to:", old.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()));
                 let er = Rect::from_min_size(client.min + Vec2::new(12.0, 30.0), Vec2::new(client.width() - 24.0, 21.0));
-                edit(ui, er, name, true);
+                let sel = stem(name);
+                edit(ui, er, name, true, "rename", sel);
                 let (ok, cancel) = two_buttons(ui, client, "OK", "Cancel");
                 if (ok || enter) && !name.trim().is_empty() {
                     return Some(Action::Rename(old.clone(), name.trim().to_string()));
@@ -227,7 +274,8 @@ impl Dialog {
                 let client = window(ui, screen, "Edit", Vec2::new(420.0, 125.0));
                 label(ui, client.min + Vec2::new(12.0, 12.0), "Edit file:");
                 let er = Rect::from_min_size(client.min + Vec2::new(12.0, 30.0), Vec2::new(client.width() - 24.0, 21.0));
-                edit(ui, er, name, true);
+                let sel = stem(name);
+                edit(ui, er, name, true, "editnew", sel);
                 let (ok, cancel) = two_buttons(ui, client, "OK", "Cancel");
                 if (ok || enter) && !name.trim().is_empty() {
                     return Some(Action::EditNew(name.trim().to_string()));
@@ -240,7 +288,8 @@ impl Dialog {
                 let client = window(ui, screen, "Define custom view", Vec2::new(420.0, 125.0));
                 label(ui, client.min + Vec2::new(12.0, 12.0), "Only show files matching (e.g. *.txt;*.doc):");
                 let er = Rect::from_min_size(client.min + Vec2::new(12.0, 30.0), Vec2::new(client.width() - 24.0, 21.0));
-                edit(ui, er, mask, true);
+                let sel = all(mask);
+                edit(ui, er, mask, true, "filter", sel);
                 let (ok, cancel) = two_buttons(ui, client, "OK", "Cancel");
                 if ok || enter {
                     return Some(Action::SetFilter(if mask.trim().is_empty() { "*.*".into() } else { mask.trim().to_string() }));
@@ -253,7 +302,8 @@ impl Dialog {
                 let client = window(ui, screen, if *on { "Expand selection" } else { "Shrink selection" }, Vec2::new(380.0, 125.0));
                 label(ui, client.min + Vec2::new(12.0, 12.0), if *on { "Select files:" } else { "Unselect files:" });
                 let er = Rect::from_min_size(client.min + Vec2::new(12.0, 30.0), Vec2::new(client.width() - 24.0, 21.0));
-                edit(ui, er, mask, true);
+                let sel = all(mask);
+                edit(ui, er, mask, true, "selgroup", sel);
                 let (ok, cancel) = two_buttons(ui, client, "OK", "Cancel");
                 if ok || enter {
                     return Some(Action::SelectGroup { mask: mask.clone(), on: *on });
@@ -283,11 +333,14 @@ impl Dialog {
                 }
             }
             Dialog::Text { title, text } => {
-                let client = window(ui, screen, title, Vec2::new(620.0, 520.0));
+                let n_lines = text.lines().count() as f32;
+                let h = (n_lines * 14.0 + 90.0).min(screen.height() - 40.0);
+                let client = window(ui, screen, title, Vec2::new(680.0, h));
                 let area = Rect::from_min_max(client.min + Vec2::new(12.0, 12.0), Pos2::new(client.right() - 12.0, client.bottom() - 44.0));
                 xp::sunken(ui.painter(), area);
                 let tp = ui.painter_at(area.shrink(4.0));
-                tp.text(area.min + Vec2::new(6.0, 4.0), Align2::LEFT_TOP, text, xp::font_mono(), xp::TEXT);
+                let mono = egui::FontId::new(11.0, egui::FontFamily::Monospace);
+                tp.text(area.min + Vec2::new(6.0, 4.0), Align2::LEFT_TOP, text, mono, xp::TEXT);
                 let y = client.bottom() - 32.0;
                 let ok = Rect::from_min_size(Pos2::new(client.center().x - 37.0, y), Vec2::new(75.0, 23.0));
                 if button(ui, ok, "OK", true, true) || enter || esc {
@@ -296,12 +349,13 @@ impl Dialog {
             }
             Dialog::Overwrite { q } => {
                 let Query::Overwrite { src, dst, src_size, dst_size, src_time, dst_time } = q;
-                let client = window(ui, screen, "Overwrite?", Vec2::new(520.0, 190.0));
+                let client = window(ui, screen, "Overwrite?", Vec2::new(560.0, 190.0));
+                let p = ui.painter().clone();
                 label(ui, client.min + Vec2::new(12.0, 12.0), "Overwrite file:");
-                xp::text_bold(ui.painter(), client.min + Vec2::new(12.0, 28.0), &dst.to_string_lossy(), xp::TEXT);
+                xp::text(&p, client.min + Vec2::new(12.0, 28.0), &xp::ellipsize_path(&p, &dst.to_string_lossy(), client.width() - 24.0, xp::font()), xp::TEXT);
                 label(ui, client.min + Vec2::new(12.0, 44.0), &format!("{} bytes, {}", fs::fmt_num(*dst_size), fs::fmt_date(dst_time)));
                 label(ui, client.min + Vec2::new(12.0, 66.0), "With file:");
-                xp::text_bold(ui.painter(), client.min + Vec2::new(12.0, 82.0), &src.to_string_lossy(), xp::TEXT);
+                xp::text(&p, client.min + Vec2::new(12.0, 82.0), &xp::ellipsize_path(&p, &src.to_string_lossy(), client.width() - 24.0, xp::font()), xp::TEXT);
                 label(ui, client.min + Vec2::new(12.0, 98.0), &format!("{} bytes, {}", fs::fmt_num(*src_size), fs::fmt_date(src_time)));
                 let y = client.bottom() - 32.0;
                 let labels = ["&Overwrite", "&All", "&Skip", "Skip a&ll", "&Cancel"];
@@ -391,7 +445,7 @@ impl Dialog {
                 let client = window(ui, screen, "Pack files", Vec2::new(520.0, 150.0));
                 label(ui, client.min + Vec2::new(12.0, 14.0), &format!("Pack {} file(s) to the archive:", sources.len()));
                 let er = Rect::from_min_size(client.min + Vec2::new(12.0, 34.0), Vec2::new(client.width() - 24.0, 21.0));
-                edit(ui, er, archive, true);
+                edit(ui, er, archive, true, "pack", None);
                 label(ui, client.min + Vec2::new(12.0, 60.0), "Packer: ZIP (deflate)");
                 let (ok, cancel) = two_buttons(ui, client, "OK", "Cancel");
                 if ok || enter {
@@ -410,7 +464,8 @@ impl Dialog {
                 let client = window(ui, screen, "Unpack files", Vec2::new(520.0, 150.0));
                 label(ui, client.min + Vec2::new(12.0, 14.0), "Unpack specific files from archive to:");
                 let er = Rect::from_min_size(client.min + Vec2::new(12.0, 34.0), Vec2::new(client.width() - 24.0, 21.0));
-                edit(ui, er, target, true);
+                let sel = all(target);
+                edit(ui, er, target, true, "copy", sel);
                 let (ok, cancel) = two_buttons(ui, client, "OK", "Cancel");
                 if ok || enter {
                     let t = PathBuf::from(target.trim().trim_end_matches("*.*").trim_end_matches('*'));
@@ -426,13 +481,14 @@ impl Dialog {
                 xp::group_box(&p, Rect::from_min_size(client.min + Vec2::new(10.0, 8.0), Vec2::new(client.width() - 20.0, 112.0)), "General");
                 label(ui, client.min + Vec2::new(22.0, 30.0), "Search for:");
                 let e1 = Rect::from_min_size(client.min + Vec2::new(100.0, 27.0), Vec2::new(client.width() - 130.0, 21.0));
-                edit(ui, e1, &mut f.mask, true);
+                let sel = all(&f.mask);
+                edit(ui, e1, &mut f.mask, true, "find-mask", sel);
                 label(ui, client.min + Vec2::new(22.0, 56.0), "Search in:");
                 let e2 = Rect::from_min_size(client.min + Vec2::new(100.0, 53.0), Vec2::new(client.width() - 130.0, 21.0));
-                edit(ui, e2, &mut f.dir, false);
+                edit(ui, e2, &mut f.dir, false, "find-dir", None);
                 label(ui, client.min + Vec2::new(22.0, 82.0), "Find text:");
                 let e3 = Rect::from_min_size(client.min + Vec2::new(100.0, 79.0), Vec2::new(client.width() - 130.0, 21.0));
-                edit(ui, e3, &mut f.text, false);
+                edit(ui, e3, &mut f.text, false, "find-text", None);
                 // results list
                 let lr = Rect::from_min_max(client.min + Vec2::new(10.0, 130.0), Pos2::new(client.right() - 10.0, client.bottom() - 70.0));
                 xp::sunken(ui.painter(), lr);
@@ -449,7 +505,7 @@ impl Dialog {
                     }
                     let col = if i == f.cursor { xp::HIGHLIGHT_TEXT } else { xp::TEXT };
                     lp.text(Pos2::new(rr.left() + 4.0, y + 1.0), Align2::LEFT_TOP, &xp::ellipsize_path(&lp, &path.to_string_lossy(), rr.width() - 8.0, xp::font()), xp::font(), col);
-                    let resp = ui.interact(rr, ui.id().with(("fres", i)), Sense::click());
+                    let resp = ui.interact(rr, ui.id().with(("fres", i)), Sense::CLICK);
                     if resp.clicked() {
                         f.cursor = i;
                     }
@@ -616,7 +672,7 @@ impl Dialog {
                 }
                 label(ui, Pos2::new(client.left() + 12.0, client.top() + 236.0), "Editor for F4 (empty = system default):");
                 let er = Rect::from_min_size(Pos2::new(client.left() + 12.0, client.top() + 254.0), Vec2::new(client.width() - 24.0, 21.0));
-                edit(ui, er, &mut o.editor, false);
+                edit(ui, er, &mut o.editor, false, "editor", None);
                 let (ok, cancel) = two_buttons(ui, client, "OK", "Cancel");
                 if ok || enter {
                     return Some(Action::ApplyOptions(o.clone()));

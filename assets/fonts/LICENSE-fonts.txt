@@ -190,3 +190,7 @@ License: Expat
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE.
+
+Modification (total-commacer, 2026-10-14): in tahomabd.ttf the advance width of the
+"/" glyph (glyph 18) was changed from 1182 to 900 font units; the original value made
+slashes in bold text look like they were followed by a space.
