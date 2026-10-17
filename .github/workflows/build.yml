@@ -4,6 +4,11 @@ on:
     branches: [main]
     tags: ["v*"]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to create, e.g. v0.1.0"
+        required: true
 jobs:
   build:
     strategy:
@@ -47,8 +52,10 @@ jobs:
   # A pushed tag v* turns the four binaries into a GitHub Release with download links.
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
     permissions:
       contents: write
     steps:
@@ -58,7 +65,7 @@ jobs:
       - name: Package
         run: |
           set -e
-          V=${GITHUB_REF_NAME}
+          V=${VERSION}
           mkdir dist
           chmod +x artifacts/total-commacer-linux-x86_64/total-commacer artifacts/total-commacer-macos-*/total-commacer
           tar -C artifacts/total-commacer-linux-x86_64 -czf dist/total-commacer-$V-linux-x86_64.tar.gz total-commacer
@@ -69,6 +76,7 @@ jobs:
           ls -la dist
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.VERSION }}
           files: dist/*
           generate_release_notes: true
           body: |
