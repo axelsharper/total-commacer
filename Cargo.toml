@@ -1,6 +1,6 @@
 [package]
 name = "total-commacer"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A Total Commander-style two-panel file manager that looks like Windows XP, for macOS, Linux and Windows"
 license = "MIT"

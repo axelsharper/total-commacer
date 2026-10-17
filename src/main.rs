@@ -46,17 +46,11 @@ fn setup_fonts(ctx: &egui::Context) {
         o.quit_shortcuts.clear();
         o.zoom_with_keyboard = false;
     });
+    xp::apply_egui_visuals(ctx);
     ctx.all_styles_mut(|style| {
         style.text_styles.insert(egui::TextStyle::Body, egui::FontId::new(11.0, egui::FontFamily::Proportional));
         style.text_styles.insert(egui::TextStyle::Button, egui::FontId::new(11.0, egui::FontFamily::Proportional));
         style.text_styles.insert(egui::TextStyle::Monospace, egui::FontId::new(12.0, egui::FontFamily::Monospace));
-        style.visuals.override_text_color = Some(xp::TEXT);
-        style.visuals.selection.bg_fill = xp::HIGHLIGHT;
-        style.visuals.selection.stroke = egui::Stroke::new(1.0, xp::HIGHLIGHT_TEXT);
-        style.visuals.text_cursor.stroke = egui::Stroke::new(1.0, xp::TEXT);
-        style.visuals.window_fill = xp::FACE;
-        style.visuals.panel_fill = xp::FACE;
-        style.visuals.extreme_bg_color = xp::WINDOW;
         style.spacing.item_spacing = egui::vec2(0.0, 0.0);
         style.interaction.tooltip_delay = 0.5;
     });

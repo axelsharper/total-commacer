@@ -84,6 +84,8 @@ impl App {
         let left = Panel::new(cfg.left.path.clone(), cfg.left.sort, cfg.left.reverse, cfg.left.brief, cfg.show_hidden);
         let right = Panel::new(cfg.right.path.clone(), cfg.right.sort, cfg.right.reverse, cfg.right.brief, cfg.show_hidden);
         let nag = cfg.nag;
+        xp::set_theme(cfg.theme);
+        xp::apply_egui_visuals(&cc.egui_ctx);
         let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(0);
         let mut app = Self {
             cfg,
@@ -452,6 +454,7 @@ impl App {
                     show_hidden: self.cfg.show_hidden,
                     quick_search: self.cfg.quick_search,
                     editor: self.cfg.editor.clone(),
+                    theme: self.cfg.theme,
                 }))
             }
             About => self.dialog = Some(Dialog::About),
@@ -753,7 +756,7 @@ impl App {
                 }
             })
             .collect();
-        let pos = self.menu_rects.get(i).map(|r| r.left_bottom()).unwrap_or(Pos2::new(xp::BORDER_W, xp::TITLE_H + MENU_H));
+        let pos = self.menu_rects.get(i).map(|r| r.left_bottom()).unwrap_or(Pos2::new(xp::BORDER_W, xp::title_h() + MENU_H));
         self.popup = Some(Popup { items, pos, width: 300.0, menu_index: Some(i), hover: None, opened_at: self.now });
     }
 
@@ -764,7 +767,7 @@ impl App {
             .map(|d| PopupItem::Item { label: format!("[{}]  {}", d.letter, d.label), shortcut: String::new(), enabled: true, action: PopupAction::Goto(side, d.root.clone()) })
             .collect();
         let x = if side == Side::Left { xp::BORDER_W + 4.0 } else { xp::BORDER_W + 4.0 + (self.left_width()) };
-        self.popup = Some(Popup { items, pos: Pos2::new(x, xp::TITLE_H + MENU_H + TOOLBAR_H + DRIVEBAR_H + panel::DRIVE_ROW_H), width: 220.0, menu_index: None, hover: None, opened_at: self.now });
+        self.popup = Some(Popup { items, pos: Pos2::new(x, xp::title_h() + MENU_H + TOOLBAR_H + DRIVEBAR_H + panel::DRIVE_ROW_H), width: 220.0, menu_index: None, hover: None, opened_at: self.now });
         self.active = side;
     }
 
@@ -775,7 +778,7 @@ impl App {
         items.push(PopupItem::Item { label: "&Add current dir".into(), shortcut: String::new(), enabled: true, action: PopupAction::HotAdd });
         items.push(PopupItem::Item { label: "&Remove current dir".into(), shortcut: String::new(), enabled: true, action: PopupAction::HotRemove });
         let x = self.panel_x(side) + 8.0;
-        self.popup = Some(Popup { items, pos: Pos2::new(x, xp::TITLE_H + MENU_H + TOOLBAR_H + DRIVEBAR_H + panel::DRIVE_ROW_H + panel::PATH_ROW_H), width: 260.0, menu_index: None, hover: None, opened_at: self.now });
+        self.popup = Some(Popup { items, pos: Pos2::new(x, xp::title_h() + MENU_H + TOOLBAR_H + DRIVEBAR_H + panel::DRIVE_ROW_H + panel::PATH_ROW_H), width: 260.0, menu_index: None, hover: None, opened_at: self.now });
     }
 
     fn dir_history_popup(&mut self) {
@@ -783,7 +786,7 @@ impl App {
         let hist: Vec<PathBuf> = self.active().history.iter().rev().take(20).cloned().collect();
         let items = hist.iter().map(|p| PopupItem::Item { label: fs::display(p), shortcut: String::new(), enabled: true, action: PopupAction::Goto(side, p.clone()) }).collect();
         let x = self.panel_x(side) + 8.0;
-        self.popup = Some(Popup { items, pos: Pos2::new(x, xp::TITLE_H + MENU_H + TOOLBAR_H + DRIVEBAR_H + panel::DRIVE_ROW_H + panel::PATH_ROW_H), width: 320.0, menu_index: None, hover: None, opened_at: self.now });
+        self.popup = Some(Popup { items, pos: Pos2::new(x, xp::title_h() + MENU_H + TOOLBAR_H + DRIVEBAR_H + panel::DRIVE_ROW_H + panel::PATH_ROW_H), width: 320.0, menu_index: None, hover: None, opened_at: self.now });
     }
 
     fn cmd_history_popup(&mut self) {
@@ -1164,6 +1167,11 @@ impl App {
                 self.cfg.right_click_selects = o.right_click_selects;
                 self.cfg.quick_search = o.quick_search;
                 self.cfg.editor = o.editor;
+                if self.cfg.theme != o.theme {
+                    self.cfg.theme = o.theme;
+                    xp::set_theme(o.theme);
+                    xp::apply_egui_visuals(ctx);
+                }
                 if self.cfg.show_hidden != o.show_hidden {
                     self.dispatch(ctx, Cmd::ToggleHidden);
                 }
@@ -1267,7 +1275,7 @@ impl App {
     // ---------------------------------------------------------------- drawing
     fn draw_menubar(&mut self, ui: &mut Ui, r: Rect) {
         let p = ui.painter();
-        xp::fill(p, r, xp::FACE);
+        xp::fill(p, r, xp::face());
         let mut x = r.left() + 2.0;
         self.menu_rects.clear();
         let open = self.popup.as_ref().and_then(|p| p.menu_index);
@@ -1281,12 +1289,12 @@ impl App {
             let p = ui.painter();
             let hi = open == Some(i);
             if hi {
-                xp::fill(p, mr, xp::HIGHLIGHT);
+                xp::fill(p, mr, xp::highlight());
                 xp::mnemonic_text(p, mr.center(), Align2::CENTER_CENTER, m.title, xp::font(), xp::HIGHLIGHT_TEXT);
             } else {
                 if resp.hovered() {
                     xp::fill(p, mr, xp::rgb(0xF6, 0xF7, 0xFD));
-                    xp::frame(p, mr, xp::HIGHLIGHT);
+                    xp::frame(p, mr, xp::highlight());
                 }
                 xp::mnemonic_text(p, mr.center(), Align2::CENTER_CENTER, m.title, xp::font(), xp::TEXT);
             }
@@ -1308,7 +1316,7 @@ impl App {
 
     fn draw_toolbar(&mut self, ui: &mut Ui, r: Rect) -> Option<Cmd> {
         let p = ui.painter();
-        xp::fill(p, r, xp::FACE);
+        xp::fill(p, r, xp::face());
         let brief = self.active().view == panel::View::Brief;
         let items: Vec<(Option<&egui::TextureHandle>, &str, Option<Cmd>, bool)> = vec![
             (Some(&self.icons.tb_refresh), "Reread source", Some(Cmd::Reread), false),
@@ -1377,7 +1385,7 @@ impl App {
 
     fn draw_drivebar(&mut self, ui: &mut Ui, r: Rect, side: Side) {
         let p = ui.painter();
-        xp::fill(p, r, xp::FACE);
+        xp::fill(p, r, xp::face());
         let cur = self.panel(side).path.clone();
         let drives = self.drives.clone();
         let current = drives.iter().filter(|d| cur.starts_with(&d.root)).max_by_key(|d| d.root.as_os_str().len()).map(|d| d.root.clone());
@@ -1403,7 +1411,7 @@ impl App {
 
     fn draw_cmdline(&mut self, ui: &mut Ui, r: Rect) {
         let p = ui.painter();
-        xp::fill(p, r, xp::FACE);
+        xp::fill(p, r, xp::face());
         let prompt = format!("{}>", fs::display(&self.active().path));
         let max_w = (r.width() * 0.4).max(60.0);
         let shown = xp::ellipsize_path(p, &prompt, max_w, xp::font());
@@ -1430,7 +1438,7 @@ impl App {
 
     fn draw_fkeys(&mut self, ui: &mut Ui, r: Rect) -> Option<Cmd> {
         let p = ui.painter();
-        xp::fill(p, r, xp::FACE);
+        xp::fill(p, r, xp::face());
         let shift = ui.input(|i| i.modifiers.shift);
         let keys: [(&str, Cmd); 7] = if shift {
             [("F3 View", Cmd::ViewCursor), ("F4 Edit", Cmd::EditNew), ("F5 Copy", Cmd::CopySameDir), ("F6 Rename", Cmd::Rename), ("F7 NewFolder", Cmd::MkDir), ("F8 Delete", Cmd::Delete), ("Alt+F4 Exit", Cmd::Exit)]
@@ -1475,15 +1483,12 @@ impl App {
         let area = egui::Area::new(egui::Id::new("popup")).order(egui::Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
             let (_, _) = ui.allocate_space(r.size());
             let p = ui.painter();
-            p.rect_filled(r.translate(Vec2::new(2.0, 2.0)), 0.0, Color32::from_black_alpha(40));
-            xp::fill(p, r, xp::WINDOW);
-            xp::frame(p, r, xp::rgb(0x9D, 0x9D, 0xA1));
-            p.rect_filled(Rect::from_min_size(r.min + Vec2::new(1.0, 1.0), Vec2::new(24.0, r.height() - 2.0)), 0.0, xp::rgb(0xF1, 0xF1, 0xF1));
+            xp::menu_frame(p, r);
             let mut y = r.top() + 3.0;
             for (i, it) in items.iter().enumerate() {
                 match it {
                     PopupItem::Sep => {
-                        p.rect_filled(Rect::from_min_size(Pos2::new(r.left() + 28.0, y + 3.0), Vec2::new(r.width() - 32.0, 1.0)), 0.0, xp::rgb(0xC5, 0xC5, 0xC5));
+                        xp::menu_separator(p, r, y + 3.0);
                         y += 7.0;
                     }
                     PopupItem::Item { label, shortcut, enabled, action } => {
@@ -1495,9 +1500,9 @@ impl App {
                         let hi = new_hover == Some(i) && *enabled;
                         let p = ui.painter();
                         if hi {
-                            xp::fill(p, ir, xp::HIGHLIGHT);
+                            xp::fill(p, ir, xp::highlight());
                         }
-                        let fg = if !*enabled { xp::GRAYTEXT } else if hi { xp::HIGHLIGHT_TEXT } else { xp::TEXT };
+                        let fg = if !*enabled { xp::graytext() } else if hi { xp::HIGHLIGHT_TEXT } else { xp::TEXT };
                         xp::mnemonic_text(p, Pos2::new(ir.left() + 28.0, ir.center().y), Align2::LEFT_CENTER, label, xp::font(), fg);
                         p.text(Pos2::new(ir.right() - 12.0, ir.center().y), Align2::RIGHT_CENTER, shortcut, xp::font(), fg);
                         if resp.clicked() && *enabled {
@@ -1535,28 +1540,13 @@ impl App {
 pub fn frame_window(ui: &mut Ui, screen: Rect, title: &str, icon: &egui::TextureHandle, maximized: bool) -> (Rect, bool) {
     let p = ui.painter();
     let active = ui.input(|i| i.viewport().focused.unwrap_or(true));
-    let frame_c = if active { xp::FRAME } else { xp::FRAME_INACTIVE };
-    xp::fill(p, screen, frame_c);
-    let cap = Rect::from_min_size(screen.min, Vec2::new(screen.width(), xp::TITLE_H));
-    xp::caption(p, cap, active);
-    // side/bottom bevel lines
-    xp::px(p, screen.left(), cap.bottom(), 1.0, screen.height() - cap.height(), xp::FRAME_LIGHT);
-    xp::px(p, screen.right() - 1.0, cap.bottom(), 1.0, screen.height() - cap.height(), xp::FRAME_DARK);
-    xp::px(p, screen.left(), screen.bottom() - 1.0, screen.width(), 1.0, xp::FRAME_DARK);
-    let client = Rect::from_min_max(Pos2::new(screen.left() + xp::BORDER_W, cap.bottom()), Pos2::new(screen.right() - xp::BORDER_W, screen.bottom() - xp::BORDER_W));
-    xp::fill(p, client, xp::FACE);
-    icons::draw(p, icon, Pos2::new(screen.left() + 8.0, screen.top() + 7.0));
-    let tcol = if active { Color32::WHITE } else { xp::rgb(0xD8, 0xE4, 0xF8) };
-    // caption buttons
-    let by = screen.top() + 5.0;
-    let close = Rect::from_min_size(Pos2::new(screen.right() - 5.0 - 21.0, by), Vec2::splat(21.0));
-    let max = Rect::from_min_size(Pos2::new(close.left() - 2.0 - 21.0, by), Vec2::splat(21.0));
-    let min = Rect::from_min_size(Pos2::new(max.left() - 21.0, by), Vec2::splat(21.0));
-    let title_clip = Rect::from_min_max(Pos2::new(screen.left() + 28.0, screen.top()), Pos2::new(min.left() - 6.0, cap.bottom()));
-    let title_shown = xp::ellipsize(p, title, title_clip.width(), xp::font_caption());
-    let tp = p.with_clip_rect(title_clip);
-    tp.text(Pos2::new(screen.left() + 29.0, screen.top() + 8.0), Align2::LEFT_TOP, &title_shown, xp::font_caption(), xp::rgb(0x0A, 0x24, 0x6A));
-    tp.text(Pos2::new(screen.left() + 28.0, screen.top() + 7.0), Align2::LEFT_TOP, &title_shown, xp::font_caption(), tcol);
+    xp::window_frame(p, screen, active);
+    let l = xp::window_layout(screen);
+    let client = l.client;
+    let cap = l.cap;
+    let (min, max, close) = (l.min, l.max, l.close);
+    icons::draw(p, icon, l.icon);
+    xp::caption_title(p, &l, title, active);
     let mut closed = false;
     for (r, kind, name) in [(min, xp::CaptionButton::Minimize, "min"), (max, if maximized { xp::CaptionButton::Restore } else { xp::CaptionButton::Maximize }, "max"), (close, xp::CaptionButton::Close, "close")] {
         let resp = ui.interact(r, ui.id().with(("cap", name)), Sense::CLICK);
@@ -1674,7 +1664,7 @@ impl eframe::App for App {
             self.draw_drivebar(ui, dl, Side::Left);
             self.draw_drivebar(ui, dr, Side::Right);
             // splitter
-            ui.painter().rect_filled(Rect::from_min_max(Pos2::new(lrect.right(), panels.top()), Pos2::new(rrect.left(), panels.bottom())), 0.0, xp::FACE);
+            ui.painter().rect_filled(Rect::from_min_max(Pos2::new(lrect.right(), panels.top()), Pos2::new(rrect.left(), panels.bottom())), 0.0, xp::face());
 
             let active = self.active;
             let rcs = self.cfg.right_click_selects;

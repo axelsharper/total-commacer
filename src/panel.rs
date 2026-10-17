@@ -521,7 +521,7 @@ impl Panel {
 
         // --- drive row: [-c-] v   123 456 k of 234 567 k free      [\] [..]
         let drive_row = Rect::from_min_size(rect.min, Vec2::new(rect.width(), DRIVE_ROW_H));
-        xp::fill(&p, drive_row, xp::FACE);
+        xp::fill(&p, drive_row, xp::face());
         let combo = Rect::from_min_size(drive_row.min + Vec2::new(0.0, 2.0), Vec2::new(46.0, 20.0));
         xp::sunken(&p, combo);
         let drv = drives.iter().filter(|d| self.path.starts_with(&d.root)).max_by_key(|d| d.root.as_os_str().len());
@@ -535,7 +535,7 @@ impl Panel {
         let arrow = Rect::from_min_size(Pos2::new(combo.right() - 16.0, combo.top() + 1.0), Vec2::new(15.0, 18.0));
         let ar = ui.interact(combo, id.with("drive"), Sense::CLICK);
         xp::scrollbar_button(&p, arrow, ar.hovered(), ar.is_pointer_button_down_on());
-        xp::arrow_glyph(&p, arrow.center(), xp::Dir::Down, xp::rgb(0x4D, 0x61, 0x85));
+        xp::arrow_glyph(&p, arrow.center(), xp::Dir::Down, xp::arrow_color());
         if ar.clicked() {
             ev.push(PanelEvent::DriveMenu);
         }
@@ -561,7 +561,7 @@ impl Panel {
 
         // --- path row
         let path_row = Rect::from_min_size(Pos2::new(rect.left(), drive_row.bottom()), Vec2::new(rect.width(), PATH_ROW_H));
-        let (bg, fg) = if active { (xp::HIGHLIGHT, xp::HIGHLIGHT_TEXT) } else { (xp::FACE, xp::TEXT) };
+        let (bg, fg) = if active { (xp::highlight(), xp::HIGHLIGHT_TEXT) } else { (xp::face(), xp::TEXT) };
         xp::fill(&p, path_row, bg);
         let title = match &self.list_title {
             Some(t) => t.clone(),
@@ -582,7 +582,7 @@ impl Panel {
         let mut top = path_row.bottom();
         if self.tabs.len() > 1 {
             let tabs_row = Rect::from_min_size(Pos2::new(rect.left(), top), Vec2::new(rect.width(), 20.0));
-            xp::fill(&p, tabs_row, xp::FACE);
+            xp::fill(&p, tabs_row, xp::face());
             let mut x = tabs_row.left() + 2.0;
             let mut clicked_tab = None;
             let tabs = self.tabs.clone();
@@ -593,11 +593,11 @@ impl Panel {
                 let resp = ui.interact(r, id.with(("tab", i)), Sense::CLICK);
                 if i == self.tab {
                     xp::fill(&p, r, xp::WINDOW);
-                    xp::frame(&p, r, xp::SHADOW);
+                    xp::frame(&p, r, xp::shadow());
                     px_line(&p, r.left() + 1.0, r.bottom() - 1.0, r.width() - 2.0, xp::WINDOW);
                 } else {
-                    xp::fill(&p, r.shrink2(Vec2::new(0.0, 2.0)), xp::LIGHT);
-                    xp::frame(&p, r.shrink2(Vec2::new(0.0, 2.0)), xp::SHADOW);
+                    xp::fill(&p, r.shrink2(Vec2::new(0.0, 2.0)), xp::light());
+                    xp::frame(&p, r.shrink2(Vec2::new(0.0, 2.0)), xp::shadow());
                 }
                 p.text(r.center(), Align2::CENTER_CENTER, &name, xp::font(), xp::TEXT);
                 if resp.clicked() && i != self.tab {
@@ -610,7 +610,7 @@ impl Panel {
                 self.switch_tab(d);
                 ev.push(PanelEvent::Activate);
             }
-            px_line(&p, tabs_row.left(), tabs_row.bottom() - 1.0, tabs_row.width(), xp::SHADOW);
+            px_line(&p, tabs_row.left(), tabs_row.bottom() - 1.0, tabs_row.width(), xp::shadow());
             top = tabs_row.bottom();
         }
 
@@ -625,7 +625,7 @@ impl Panel {
         }
 
         // --- status line
-        xp::fill(&p, status, xp::FACE);
+        xp::fill(&p, status, xp::face());
         let st = self.status_text();
         xp::text(&p, status.min + Vec2::new(3.0, 2.0), &st, xp::TEXT);
         if let Some(q) = &self.quick {
@@ -668,7 +668,7 @@ impl Panel {
                 let ax = if i == 2 { r.left() + 10.0 } else { r.right() - 12.0 };
                 // TC: name/ext ascending = arrow down; size/date default (descending) = arrow up
                 let up = matches!(self.sort, SortBy::Size | SortBy::Date) != self.reverse;
-                xp::sort_arrow(&p, Pos2::new(ax, r.top() + 7.0), up, xp::DKSHADOW);
+                xp::sort_arrow(&p, Pos2::new(ax, r.top() + 7.0), up, xp::dkshadow());
             }
             if resp.clicked() {
                 if let Some(s) = sort {
@@ -882,7 +882,7 @@ pub fn scrollbar(ui: &mut Ui, p: &egui::Painter, r: Rect, id: Id, pos: usize, pa
     let r2 = ui.interact(b2, id.with("b2"), Sense::CLICK);
     xp::scrollbar_button(p, b1, r1.hovered(), r1.is_pointer_button_down_on());
     xp::scrollbar_button(p, b2, r2.hovered(), r2.is_pointer_button_down_on());
-    let glyph = xp::rgb(0x4D, 0x61, 0x85);
+    let glyph = xp::arrow_color();
     xp::arrow_glyph(p, b1.center(), if vertical { xp::Dir::Up } else { xp::Dir::Left }, glyph);
     xp::arrow_glyph(p, b2.center(), if vertical { xp::Dir::Down } else { xp::Dir::Right }, glyph);
     if r1.clicked() && pos > 0 {

@@ -37,6 +37,7 @@ pub struct Options {
     pub show_hidden: bool,
     pub quick_search: QuickSearch,
     pub editor: String,
+    pub theme: xp::Theme,
 }
 
 pub struct FindState {
@@ -88,24 +89,18 @@ fn keys(ui: &Ui, fresh: bool) -> (bool, bool) {
 pub fn window(ui: &mut Ui, screen: Rect, title: &str, size: Vec2) -> Rect {
     let r = xp::round_rect(Rect::from_center_size(screen.center(), size));
     let p = ui.painter().clone();
-    // dim nothing (XP didn't); just paint the window with a thin dark-blue frame
-    p.rect_filled(r.expand(1.0), 0.0, xp::FRAME_DARK);
-    xp::fill(&p, r, xp::FACE);
-    xp::frame(&p, r, xp::FRAME);
-    let cap = Rect::from_min_size(r.min + Vec2::new(1.0, 1.0), Vec2::new(r.width() - 2.0, 24.0));
-    xp::caption(&p, cap, true);
-    p.text(cap.min + Vec2::new(8.0, 5.0), Align2::LEFT_TOP, title, xp::font_caption(), xp::rgb(0x0A, 0x24, 0x6A));
-    p.text(cap.min + Vec2::new(7.0, 4.0), Align2::LEFT_TOP, title, xp::font_caption(), Color32::WHITE);
+    // nothing is dimmed (Windows didn't); just paint the dialog frame
+    let client = xp::dialog_frame(&p, r, title);
     // block clicks from reaching the panels below
     let _ = ui.interact(r, ui.id().with("dlg-modal"), Sense::CLICK | Sense::DRAG);
-    Rect::from_min_max(Pos2::new(r.left() + 1.0, cap.bottom()), r.max - Vec2::new(1.0, 1.0))
+    client
 }
 
 pub fn button(ui: &mut Ui, r: Rect, label: &str, default: bool, enabled: bool) -> bool {
     let resp = ui.interact(r, ui.id().with(("dbtn", label, r.min.x as i32, r.min.y as i32)), Sense::CLICK);
     let p = ui.painter().clone();
     xp::button_face(&p, r, resp.hovered() && enabled, resp.is_pointer_button_down_on() && enabled, default, enabled);
-    xp::mnemonic_text(&p, r.center(), Align2::CENTER_CENTER, label, xp::font(), if enabled { xp::TEXT } else { xp::GRAYTEXT });
+    xp::mnemonic_text(&p, r.center(), Align2::CENTER_CENTER, label, xp::font(), if enabled { xp::TEXT } else { xp::graytext() });
     let (text, under) = xp::strip_mnemonic(label);
     let mnemonic = under.and_then(|u| text.chars().nth(u)).map(|c| c.to_ascii_lowercase());
     let fresh = ui.data(|d| d.get_temp::<bool>(egui::Id::new("dlg-fresh"))).unwrap_or(false);
@@ -162,7 +157,7 @@ pub fn check(ui: &mut Ui, pos: Pos2, label: &str, v: &mut bool) {
     let w = xp::text_width(ui.painter(), label) + 20.0;
     let r = Rect::from_min_size(pos, Vec2::new(w, 14.0));
     let resp = ui.interact(r, ui.id().with(("chk", label)), Sense::CLICK);
-    if resp.clicked() {
+    if resp.clicked() || mnemonic_hit(ui, label) {
         *v = !*v;
     }
     let p = ui.painter().clone();
@@ -177,7 +172,17 @@ pub fn radio(ui: &mut Ui, pos: Pos2, label: &str, on: bool) -> bool {
     let p = ui.painter().clone();
     xp::radio(&p, Rect::from_min_size(pos, Vec2::splat(13.0)), on);
     xp::mnemonic_text(&p, Pos2::new(pos.x + 18.0, pos.y + 7.0), Align2::LEFT_CENTER, label, xp::font(), xp::TEXT);
-    resp.clicked()
+    resp.clicked() || mnemonic_hit(ui, label)
+}
+
+/// The underlined letter of a check box / radio button label was pressed this frame.
+fn mnemonic_hit(ui: &Ui, label: &str) -> bool {
+    let fresh = ui.data(|d| d.get_temp::<bool>(egui::Id::new("dlg-fresh"))).unwrap_or(false);
+    if fresh {
+        return false;
+    }
+    let (text, under) = xp::strip_mnemonic(label);
+    under.and_then(|u| text.chars().nth(u)).map(|c| mnemonic_pressed(ui, c.to_ascii_lowercase())).unwrap_or(false)
 }
 
 fn label(ui: &Ui, pos: Pos2, s: &str) {
@@ -501,7 +506,7 @@ impl Dialog {
                     let y = inner.top() + row as f32 * 16.0;
                     let rr = Rect::from_min_size(Pos2::new(inner.left(), y), Vec2::new(inner.width() - xp::SB_W, 16.0));
                     if i == f.cursor {
-                        lp.rect_filled(rr, 0.0, xp::HIGHLIGHT);
+                        lp.rect_filled(rr, 0.0, xp::highlight());
                     }
                     let col = if i == f.cursor { xp::HIGHLIGHT_TEXT } else { xp::TEXT };
                     lp.text(Pos2::new(rr.left() + 4.0, y + 1.0), Align2::LEFT_TOP, &xp::ellipsize_path(&lp, &path.to_string_lossy(), rr.width() - 8.0, xp::font()), xp::font(), col);
@@ -652,7 +657,7 @@ impl Dialog {
                 }
             }
             Dialog::Options(o) => {
-                let client = window(ui, screen, "Configuration", Vec2::new(460.0, 330.0));
+                let client = window(ui, screen, "Configuration", Vec2::new(460.0, 392.0));
                 let p = ui.painter().clone();
                 xp::group_box(&p, Rect::from_min_size(client.min + Vec2::new(10.0, 8.0), Vec2::new(client.width() - 20.0, 120.0)), "Operation");
                 let x = client.left() + 24.0;
@@ -673,6 +678,13 @@ impl Dialog {
                 label(ui, Pos2::new(client.left() + 12.0, client.top() + 236.0), "Editor for F4 (empty = system default):");
                 let er = Rect::from_min_size(Pos2::new(client.left() + 12.0, client.top() + 254.0), Vec2::new(client.width() - 24.0, 21.0));
                 edit(ui, er, &mut o.editor, false, "editor", None);
+                xp::group_box(&p, Rect::from_min_size(client.min + Vec2::new(10.0, 286.0), Vec2::new(client.width() - 20.0, 48.0)), "Look");
+                if radio(ui, Pos2::new(x, client.top() + 308.0), "&Windows Classic", o.theme == xp::Theme::Classic) {
+                    o.theme = xp::Theme::Classic;
+                }
+                if radio(ui, Pos2::new(x + 200.0, client.top() + 308.0), "Windows &XP", o.theme == xp::Theme::Luna) {
+                    o.theme = xp::Theme::Luna;
+                }
                 let (ok, cancel) = two_buttons(ui, client, "OK", "Cancel");
                 if ok || enter {
                     return Some(Action::ApplyOptions(o.clone()));

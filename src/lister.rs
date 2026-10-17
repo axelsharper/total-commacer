@@ -124,7 +124,7 @@ impl Lister {
 
     pub fn ui(&mut self, ui: &mut Ui, rect: Rect, active: bool) {
         let p = ui.painter_at(rect);
-        xp::fill(&p, rect, xp::FACE);
+        xp::fill(&p, rect, xp::face());
         let menu_h = 20.0;
         let menu = Rect::from_min_size(rect.min, Vec2::new(rect.width(), menu_h));
         // menu bar: File Edit Options Help  (only the keys that matter are wired)
@@ -136,7 +136,7 @@ impl Lister {
             let r = Rect::from_min_size(Pos2::new(x, menu.top() + 1.0), Vec2::new(w, menu_h - 2.0));
             let resp = ui.interact(r, ui.id().with(("lmenu", i)), Sense::CLICK);
             if resp.hovered() || self.menu_open == Some(i) {
-                xp::fill(&p, r, xp::HIGHLIGHT);
+                xp::fill(&p, r, xp::highlight());
                 xp::mnemonic_text(&p, r.center(), Align2::CENTER_CENTER, it, xp::font(), xp::HIGHLIGHT_TEXT);
             } else {
                 xp::mnemonic_text(&p, r.center(), Align2::CENTER_CENTER, it, xp::font(), xp::TEXT);
@@ -232,7 +232,7 @@ impl Lister {
                 if let Some(pos) = line.to_lowercase().find(&q) {
                     let pre = line[..pos].chars().count() as f32;
                     let len = q.chars().count() as f32;
-                    tp.rect_filled(Rect::from_min_size(Pos2::new(text_area.left() + 2.0 + pre * char_w, y), Vec2::new(len * char_w, line_h)), 0.0, xp::HIGHLIGHT);
+                    tp.rect_filled(Rect::from_min_size(Pos2::new(text_area.left() + 2.0 + pre * char_w, y), Vec2::new(len * char_w, line_h)), 0.0, xp::highlight());
                 }
             }
             tp.text(Pos2::new(text_area.left() + 2.0, y), Align2::LEFT_TOP, line, xp::font_mono(), xp::TEXT);
@@ -255,7 +255,7 @@ impl Lister {
 
         // status
         let status = Rect::from_min_size(Pos2::new(rect.left(), rect.bottom() - status_h), Vec2::new(rect.width(), status_h));
-        xp::fill(&p, status, xp::FACE);
+        xp::fill(&p, status, xp::face());
         xp::hseparator(&p, status.left(), status.right(), status.top());
         let pct = if self.lines.is_empty() { 100 } else { ((self.scroll + self.rows_visible).min(self.lines.len()) * 100 / self.lines.len()) as u32 };
         let mode = match self.mode {
@@ -268,10 +268,7 @@ impl Lister {
         // search box
         if self.searching {
             let r = Rect::from_center_size(view.center(), Vec2::new(360.0, 110.0));
-            xp::fill(&p, r, xp::FACE);
-            xp::caption(&p, Rect::from_min_size(r.min, Vec2::new(r.width(), 22.0)), true);
-            p.text(r.min + Vec2::new(8.0, 4.0), Align2::LEFT_TOP, "Find", xp::font_bold(), Color32::WHITE);
-            xp::frame(&p, r, xp::FRAME);
+            let _ = xp::dialog_frame(&p, r, "Find");
             xp::text(&p, r.min + Vec2::new(10.0, 34.0), "Find what:", xp::TEXT);
             let er = Rect::from_min_size(r.min + Vec2::new(70.0, 31.0), Vec2::new(270.0, 20.0));
             xp::sunken(&p, er);
@@ -323,18 +320,17 @@ impl Lister {
         let h = items.iter().map(|(l, _)| if *l == "-" { 7.0 } else { 18.0 }).sum::<f32>() + 6.0;
         let r = Rect::from_min_size(Pos2::new(x0, menu.bottom()), Vec2::new(w, h));
         let mp = ui.painter_at(r.expand(2.0));
-        xp::fill(&mp, r, xp::WINDOW);
-        xp::frame(&mp, r, xp::rgb(0x9D, 0x9D, 0xA1));
+        xp::menu_frame(&mp, r);
         let mut y = r.top() + 3.0;
         for (label, key) in items {
             if *label == "-" {
-                mp.rect_filled(Rect::from_min_size(Pos2::new(r.left() + 26.0, y + 3.0), Vec2::new(w - 30.0, 1.0)), 0.0, xp::rgb(0xC5, 0xC5, 0xC5));
+                xp::menu_separator(&mp, r, y + 3.0);
                 y += 7.0;
                 continue;
             }
             let ir = Rect::from_min_size(Pos2::new(r.left() + 2.0, y), Vec2::new(w - 4.0, 18.0));
             let resp = ui.interact(ir, ui.id().with(("lmi", open, y as i32)), Sense::CLICK);
-            let (fg, bg) = if resp.hovered() { (xp::HIGHLIGHT_TEXT, xp::HIGHLIGHT) } else { (xp::TEXT, Color32::TRANSPARENT) };
+            let (fg, bg) = if resp.hovered() { (xp::HIGHLIGHT_TEXT, xp::highlight()) } else { (xp::TEXT, Color32::TRANSPARENT) };
             xp::fill(&mp, ir, bg);
             xp::mnemonic_text(&mp, Pos2::new(ir.left() + 26.0, ir.center().y), Align2::LEFT_CENTER, label, xp::font(), fg);
             mp.text(Pos2::new(ir.right() - 8.0, ir.center().y), Align2::RIGHT_CENTER, key, xp::font(), fg);

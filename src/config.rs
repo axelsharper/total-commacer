@@ -31,6 +31,7 @@ pub struct Config {
     pub editor: String,
     pub lynx: bool,
     pub right_click_selects: bool,
+    pub theme: crate::xp::Theme,
     pub win_w: f32,
     pub win_h: f32,
     pub maximized: bool,
@@ -55,6 +56,7 @@ impl Default for Config {
             editor: String::new(),
             lynx: false,
             right_click_selects: true,
+            theme: crate::xp::Theme::Classic,
             win_w: 900.0,
             win_h: 640.0,
             maximized: false,
@@ -143,6 +145,10 @@ impl Config {
             editor: get(&ini, c, "Editor").unwrap_or("").to_string(),
             lynx: flag("LynxLike", def.lynx),
             right_click_selects: flag("RightMouseSelects", def.right_click_selects),
+            theme: match get(&ini, c, "Theme") {
+                Some("xp") | Some("luna") => crate::xp::Theme::Luna,
+                _ => crate::xp::Theme::Classic,
+            },
             win_w: num("Width", def.win_w),
             win_h: num("Height", def.win_h),
             maximized: flag("Maximized", false),
@@ -175,6 +181,7 @@ impl Config {
         s.push_str(&format!("Editor={}\n", self.editor));
         s.push_str(&format!("LynxLike={}\n", self.lynx as u8));
         s.push_str(&format!("RightMouseSelects={}\n", self.right_click_selects as u8));
+        s.push_str(&format!("Theme={}\n", if self.theme == crate::xp::Theme::Luna { "xp" } else { "classic" }));
         s.push_str(&format!("Width={}\nHeight={}\nMaximized={}\n", self.win_w as i32, self.win_h as i32, self.maximized as u8));
         for (sec, p) in [("left", &self.left), ("right", &self.right)] {
             s.push_str(&format!("\n[{sec}]\npath={}\nsort={}\nreverse={}\nbrief={}\n", p.path.to_string_lossy(), sort_name(p.sort), p.reverse as u8, p.brief as u8));
