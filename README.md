@@ -19,6 +19,13 @@ Not affiliated with Total Commander or C. Ghisler & Co. No code, icons or images
 from any other program are used; the icons are drawn here, and the font is the
 Wine project's Tahoma-compatible face (LGPL, see `assets/fonts/`).
 
+## Download
+
+Prebuilt binaries for Windows, macOS (Apple Silicon and Intel) and Linux are on the
+[Releases](https://github.com/axelsharper/total-commacer/releases) page. They are not
+code-signed: Windows SmartScreen wants "More info → Run anyway", and macOS needs
+`xattr -d com.apple.quarantine total-commacer` once before the first start.
+
 ## Build
 
 ```

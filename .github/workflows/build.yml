@@ -43,3 +43,35 @@ jobs:
         with:
           name: total-commacer-${{ matrix.name }}
           path: target/${{ matrix.target }}/release/${{ matrix.bin }}
+
+  # A pushed tag v* turns the four binaries into a GitHub Release with download links.
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Package
+        run: |
+          set -e
+          V=${GITHUB_REF_NAME}
+          mkdir dist
+          chmod +x artifacts/total-commacer-linux-x86_64/total-commacer artifacts/total-commacer-macos-*/total-commacer
+          tar -C artifacts/total-commacer-linux-x86_64 -czf dist/total-commacer-$V-linux-x86_64.tar.gz total-commacer
+          (cd artifacts/total-commacer-macos-arm64 && zip -q ../../dist/total-commacer-$V-macos-arm64.zip total-commacer)
+          (cd artifacts/total-commacer-macos-x86_64 && zip -q ../../dist/total-commacer-$V-macos-x86_64.zip total-commacer)
+          (cd artifacts/total-commacer-windows-x86_64 && zip -q ../../dist/total-commacer-$V-windows-x86_64.zip total-commacer.exe)
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+          ls -la dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            Unsigned builds. Windows: SmartScreen → "More info" → "Run anyway".
+            macOS: `xattr -d com.apple.quarantine total-commacer` once, then run it.
+            Settings live in `~/.config/total-commacer/wincmd.ini` (`%APPDATA%\total-commacer\wincmd.ini` on Windows).
